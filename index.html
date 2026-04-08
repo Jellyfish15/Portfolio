@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Portfolio — Mario Edition</title>
+  <meta name="description" content="Software Engineer & Content Creator Portfolio — Interactive Mario-style game" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ============================================================
+     LANDING SCREEN
+     ============================================================ -->
+<div id="landing-screen" class="screen active">
+
+  <!-- Starfield (JS populates) -->
+  <div class="stars" aria-hidden="true"></div>
+
+  <!-- Avatar -->
+  <div id="avatar-wrapper" role="img" aria-label="Portfolio avatar">
+    <!-- Pixel avatar (default) -->
+    <canvas id="avatar-pixel-canvas" width="180" height="180" aria-hidden="true"></canvas>
+    <!-- Real photo (shown after upload) -->
+    <img id="avatar-img" alt="Your photo" />
+
+    <!-- Upload hint -->
+    <div id="upload-hint" role="button" tabindex="0" aria-label="Upload your photo">
+      📷 Upload Photo
+    </div>
+    <input type="file" id="photo-upload-input" accept="image/*" aria-label="Photo upload" />
+  </div>
+
+  <!-- Title -->
+  <h1 id="landing-name" class="sr-only">Welcome to my Portfolio</h1>
+  <div id="landing-title" aria-hidden="true">
+    Welcome to my Portfolio
+  </div>
+
+  <div id="landing-subtitle">
+    Software Engineer &amp; Content Creator
+  </div>
+
+  <!-- CTA -->
+  <button id="start-btn" aria-label="Start the portfolio game">▶ Come Play</button>
+
+  <!-- Decorative coins -->
+  <span class="coin-deco" style="left:calc(50% - 90px); bottom:120px; --delay:0s">🪙</span>
+  <span class="coin-deco" style="left:calc(50% + 70px); bottom:100px; --delay:0.3s">🪙</span>
+</div>
+
+
+<!-- ============================================================
+     GAME SCREEN
+     ============================================================ -->
+<div id="game-screen">
+  <canvas id="game-canvas" aria-label="Mario-style portfolio game"></canvas>
+</div>
+
+
+<!-- ============================================================
+     HUD (shown during gameplay)
+     ============================================================ -->
+<div id="hud" role="status" aria-live="polite">
+  <div class="hud-panel">
+    SCORE<br/><span id="hud-score">000000</span>
+  </div>
+  <div class="hud-panel">
+    🪙 × <span id="hud-coins">00</span>
+  </div>
+  <div class="hud-panel">
+    <span id="hud-world">WORLD 1-1</span>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     MOBILE CONTROLS
+     ============================================================ -->
+<div id="mobile-controls" aria-label="Game controls">
+  <div class="dpad">
+    <button class="ctrl-btn left"  id="ctrl-left"  aria-label="Move left">◀</button>
+    <button class="ctrl-btn right" id="ctrl-right" aria-label="Move right">▶</button>
+  </div>
+  <button class="ctrl-btn jump" id="ctrl-jump" aria-label="Jump">JUMP</button>
+</div>
+
+
+<!-- ============================================================
+     CONTROLS HINT
+     ============================================================ -->
+<div id="controls-hint" aria-hidden="true">
+  Arrow Keys / WASD to move &nbsp;|&nbsp; Space / ↑ to jump &nbsp;|&nbsp; Hit ? blocks to reveal projects &nbsp;|&nbsp; ESC to close modal
+</div>
+
+
+<!-- ============================================================
+     PROJECT MODAL
+     ============================================================ -->
+<div id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-el">
+  <div id="project-modal">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <span class="modal-type-badge">◆ SOFTWARE</span>
+      <h2 id="modal-title-el" class="modal-title-text">Project Title</h2>
+      <button id="modal-close" aria-label="Close project and resume game">✕ CLOSE</button>
+    </div>
+
+    <!-- Body -->
+    <div class="modal-body">
+
+      <div class="modal-highlight">★ Featured</div>
+
+      <div class="modal-subtitle">Project Subtitle</div>
+
+      <p class="modal-description">Project description goes here.</p>
+
+      <div class="modal-section-label">TECH STACK</div>
+      <div class="tech-tags"></div>
+
+      <div class="modal-meta"></div>
+
+      <div class="modal-section-label">LINKS</div>
+      <div class="modal-links"></div>
+
+      <div class="modal-continue">[ Press ESC or click CLOSE to continue ]</div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     END SCREEN
+     ============================================================ -->
+<div id="end-screen" role="region" aria-label="Level complete — end of portfolio">
+
+  <div class="end-stars" aria-hidden="true"></div>
+
+  <div id="end-title">🏆 LEVEL CLEAR! 🏆</div>
+  <div id="end-subtitle">You've explored the full portfolio!</div>
+
+  <div id="end-score">
+    SCORE: <span id="end-score-val">000000</span> &nbsp;|&nbsp;
+    🪙 <span id="end-coins-val">0</span> &nbsp;|&nbsp;
+    PROJECTS: <span id="end-blocks-val">0</span>/<span id="total-blocks-val">9</span>
+  </div>
+
+  <div class="end-links-label">— CONNECT WITH ME —</div>
+
+  <div class="social-links-grid" id="social-links-grid">
+    <!-- Populated by JS -->
+  </div>
+
+  <button id="play-again-btn">↺ PLAY AGAIN</button>
+</div>
+
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+
+</body>
+</html>
