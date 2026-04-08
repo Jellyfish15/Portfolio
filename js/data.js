@@ -145,7 +145,9 @@ const SOCIAL_LINKS = {
   instagram:{ url: "https://instagram.com",          label: "Instagram", icon: "📸" },
 };
 
-// Landing page personal info
+// ---- PERSONAL INFO (CUSTOMIZE: replace all placeholder values below) ----
+// Update name, title, and tagline to reflect your own details.
+// The 'cta' is the call-to-action text on the landing page button.
 const PERSONAL_INFO = {
   name: "Your Name",
   title: "Software Engineer & Content Creator",
