@@ -27,6 +27,8 @@
       <!-- Starfield (JS populates) -->
       <div class="stars" aria-hidden="true"></div>
 
+      <div id="landing-greeting">Hi I'm Gene</div>
+
       <!-- Avatar -->
       <div id="avatar-wrapper" role="img" aria-label="Portfolio avatar">
         <!-- Pixel avatar (fallback) -->
@@ -37,30 +39,12 @@
           aria-hidden="true"
           style="display: none"
         ></canvas>
-        <!-- Greeting above photo -->
-        <div id="landing-greeting" style="text-align:center;font-size:2.1rem;font-family:inherit;font-weight:600;margin-bottom:0.5rem;">Hi I'm Gene</div>
         <!-- Photo (shown by default) -->
         <img
           id="avatar-img"
           src="images/avatar-image.jpeg"
           alt="Your photo"
           style="display: block"
-        />
-
-        <!-- Upload hint -->
-        <div
-          id="upload-hint"
-          role="button"
-          tabindex="0"
-          aria-label="Upload your photo"
-        >
-          📷 Upload Photo
-        </div>
-        <input
-          type="file"
-          id="photo-upload-input"
-          accept="image/*"
-          aria-label="Photo upload"
         />
       </div>
 

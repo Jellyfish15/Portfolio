@@ -1858,31 +1858,6 @@ function setupLanding() {
     drawLandingAvatar();
   }
 
-  // Photo upload
-  const hint = $("upload-hint");
-  const input = $("photo-upload-input");
-  if (hint && input) {
-    hint.addEventListener("click", () => input.click());
-    input.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const img = new Image();
-        img.onload = () => {
-          userPhoto = img;
-          // Show the real photo in landing
-          const photoEl = $("avatar-img");
-          photoEl.src = ev.target.result;
-          photoEl.style.display = "block";
-          $("avatar-pixel-canvas").style.display = "none";
-        };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
   // Start button
   $("start-btn").addEventListener("click", startGame);
 

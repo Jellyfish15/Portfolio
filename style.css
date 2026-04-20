@@ -49,7 +49,9 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0;
+  gap: 12px;
+  padding: 28px 20px 56px;
+  text-align: center;
   overflow: hidden;
 }
 
@@ -101,11 +103,24 @@ body {
 }
 
 /* Avatar container */
+#landing-greeting {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(20px, 4vw, 34px);
+  color: #fff;
+  letter-spacing: 2px;
+  text-shadow:
+    3px 3px 0 #000,
+    -1px -1px 0 #000;
+  margin-bottom: 2px;
+}
+
 #avatar-wrapper {
   position: relative;
-  width: 180px;
-  height: 180px;
-  margin-bottom: 24px;
+  width: clamp(148px, 23vw, 196px);
+  height: clamp(148px, 23vw, 196px);
+  margin-bottom: 10px;
+  flex: 0 0 auto;
   animation: avatarFloat 3s ease-in-out infinite;
 }
 @keyframes avatarFloat {
@@ -137,31 +152,6 @@ body {
   image-rendering: pixelated;
 }
 
-/* Upload button overlay */
-#upload-hint {
-  position: absolute;
-  bottom: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 7px;
-  color: var(--mario-yellow);
-  white-space: nowrap;
-  cursor: pointer;
-  text-shadow: 1px 1px 0 #000;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 4px 8px;
-  border: 1px solid var(--mario-yellow);
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-#upload-hint:hover {
-  background: rgba(251, 208, 0, 0.2);
-}
-
-#photo-upload-input {
-  display: none;
-}
-
 /* Title text */
 #landing-title {
   font-size: clamp(14px, 3vw, 22px);
@@ -171,8 +161,9 @@ body {
     3px 3px 0 #000,
     -1px -1px 0 #000;
   letter-spacing: 2px;
-  line-height: 1.7;
-  margin-bottom: 8px;
+  line-height: 1.6;
+  max-width: 26ch;
+  margin-bottom: 4px;
 }
 
 #landing-subtitle {
@@ -180,8 +171,10 @@ body {
   color: var(--mario-yellow);
   text-align: center;
   text-shadow: 2px 2px 0 #000;
-  margin-bottom: 40px;
+  max-width: min(52ch, calc(100vw - 32px));
+  margin-bottom: 22px;
   letter-spacing: 2px;
+  white-space: nowrap;
   animation: subtitlePulse 2s ease-in-out infinite;
 }
 @keyframes subtitlePulse {
@@ -257,6 +250,13 @@ body {
   border-color: rgba(255,255,255,0.5);
   transform: translateY(-1px);
 }
+
+#start-btn,
+#skip-btn {
+  position: relative;
+  z-index: 1;
+}
+
 .coin-deco {
   position: absolute;
   font-size: 20px;
@@ -1157,6 +1157,26 @@ body {
    RESPONSIVE
    ============================================================ */
 @media (max-width: 600px) {
+  #landing-screen {
+    gap: 10px;
+    padding: 24px 16px 44px;
+  }
+  #landing-greeting {
+    font-size: clamp(18px, 8vw, 28px);
+  }
+  #avatar-wrapper {
+    width: 140px;
+    height: 140px;
+    margin-bottom: 4px;
+  }
+  #landing-title {
+    line-height: 1.45;
+  }
+  #landing-subtitle {
+    max-width: min(46ch, calc(100vw - 24px));
+    white-space: normal;
+    margin-bottom: 18px;
+  }
   #mobile-controls {
     display: flex;
   }
