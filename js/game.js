@@ -105,6 +105,8 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "ArrowUp") e.preventDefault();
   if (e.code === "ArrowDown") e.preventDefault();
   if (e.code === "Escape" && gameState === STATE.MODAL) closeModal();
+  if (e.code === "Escape" && $("resume-overlay").classList.contains("active"))
+    closeResume();
 });
 document.addEventListener("keyup", (e) => {
   keys[e.code] = false;
@@ -159,263 +161,110 @@ function drawChar(x, y, frame, facingRight, jumping) {
   ctx.translate(-cw / 2, -ch / 2);
 
   // Pixel art palette
-  const R = "#e52521"; // red (hat, shirt)
-  const B = "#1565c0"; // blue (overalls)
-  const S = "#fad7a0"; // skin
-  const W = "#4e342e"; // brown (shoes)
-  const H = "#3e2723"; // dark hair
+  const LB = "#9bbede"; // light blue (shirt)
+  const DB = "#7a9fc2"; // darker blue (shirt shadow)
+  const DN = "#2c3e50"; // dark navy (pants)
+  const S = "#f5d0b0"; // fair skin
+  const W = "#5d4037"; // brown (shoes)
+  const H = "#3b2314"; // dark brown hair
+  const M = "#4a2c0f"; // mustache (dark brown)
   const _ = null; // transparent
   const E = "#fff"; // white (eyes)
-  const P = "#e91e63"; // mouth
-  const G = "#c62828"; // dark red
+  const Ep = "#4a3728"; // brown eye pupils
+  const P = "#d4857a"; // mouth/lips
 
-  // Walk frames (legs change)
-  const legFrames = [
-    // frame 0: neutral
-    [
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      B,
-      B,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      _,
-      B,
-      B,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      _,
-      _,
-      _,
-      W,
-      W,
-      W,
-      _,
-      W,
-      W,
-      W,
-      _,
-      _,
-    ],
-    // frame 1: left forward
-    [
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      B,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      B,
-      _,
-      _,
-      _,
-      B,
-      B,
-      B,
-      B,
-      _,
-      _,
-      W,
-      W,
-      W,
-      _,
-      _,
-      _,
-      B,
-      W,
-      W,
-    ],
-    // frame 2: right forward
-    [
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      B,
-      B,
-      B,
-      B,
-      B,
-      B,
-      B,
-      _,
-      _,
-      _,
-      B,
-      B,
-      B,
-      _,
-      W,
-      W,
-      B,
-      _,
-      _,
-      _,
-      W,
-      W,
-      W,
-      _,
-      _,
-    ],
-  ];
+  // --- Limb swing angle (smooth sine wave) ---
+  const phase = player ? player.limbPhase || 0 : 0;
+  const maxSwing = jumping ? 0.15 : 0.55; // radians
+  const swing = Math.sin(phase) * maxSwing;
 
-  const leg = jumping ? legFrames[0] : legFrames[frame % 3];
+  // Helper: draw a two-segment limb from a pivot point
+  function drawLimb(
+    pivotX,
+    pivotY,
+    angle,
+    upperLen,
+    lowerLen,
+    upperCol,
+    lowerCol,
+    thick,
+  ) {
+    ctx.save();
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(angle);
+    // Upper segment
+    ctx.fillStyle = upperCol;
+    ctx.beginPath();
+    ctx.roundRect(-thick / 2, 0, thick, upperLen, thick / 3);
+    ctx.fill();
+    // Lower segment with slight knee/elbow bend
+    ctx.translate(0, upperLen);
+    ctx.rotate(Math.abs(angle) * 0.35);
+    ctx.fillStyle = lowerCol;
+    ctx.beginPath();
+    ctx.roundRect(-thick / 2, 0, thick, lowerLen, thick / 3);
+    ctx.fill();
+    ctx.restore();
+  }
 
-  // Full body grid (rows 0-9 body, rows 10-15 legs from frame)
+  const armThick = px * 1.8;
+  const upperArmLen = py * 2.0;
+  const forearmLen = py * 1.8;
+  const legThick = px * 2.0;
+  const upperLegLen = py * 2.0;
+  const lowerLegLen = py * 2.0;
+
+  const shoulderLX = cw * 0.12;
+  const shoulderRX = cw * 0.82;
+  const shoulderY = py * 8.5;
+  const hipLX = cw * 0.3;
+  const hipRX = cw * 0.62;
+  const hipY = py * 12;
+
+  // --- Draw BACK arm & leg (behind body) ---
+  drawLimb(
+    shoulderLX,
+    shoulderY,
+    swing,
+    upperArmLen,
+    forearmLen,
+    LB,
+    S,
+    armThick,
+  );
+  drawLimb(hipLX, hipY, swing, upperLegLen, lowerLegLen, DN, W, legThick);
+
+  // --- Body grid (12 rows: stocky Mario-like proportions) ---
   const body = [
-    // row 0: hat
-    [_, _, _, R, R, R, R, R, _, _, _],
-    // row 1: hat
-    [_, _, R, R, R, R, R, R, R, _, _],
-    // row 2: hat with band
+    // row 0: top of hair
+    [_, _, _, H, H, H, H, H, _, _, _],
+    // row 1: hair full width
     [_, _, H, H, H, H, H, H, H, _, _],
-    // row 3: face
-    [_, S, S, S, S, S, S, S, S, S, _],
-    // row 4: face with eyes
-    [_, S, S, E, S, S, S, E, S, S, _],
-    // row 5: face
-    [_, S, S, S, S, S, S, S, S, S, _],
-    // row 6: face with mouth
-    [_, S, S, S, P, P, P, S, S, S, _],
-    // row 7: shirt/overalls top
-    [_, R, R, R, B, B, B, R, R, R, _],
-    // row 8: overalls
-    [R, R, R, B, B, B, B, B, R, R, R],
-    // row 9: overalls
-    [R, B, B, B, B, B, B, B, B, B, R],
-    // rows 10-15: from leg frame
-    ...leg.reduce((acc, _, i) => {
-      if (i % 11 === 0) acc.push([]);
-      acc[acc.length - 1].push(leg[i]);
-      return acc;
-    }, []),
+    // row 2: hair + forehead
+    [_, H, H, H, S, S, S, H, H, H, _],
+    // row 3: face with hair sides
+    [H, H, S, S, S, S, S, S, S, H, H],
+    // row 4: eyes (brown pupils on white)
+    [H, H, S, E, Ep, S, Ep, E, S, H, H],
+    // row 5: nose / cheeks
+    [H, H, S, S, S, S, S, S, S, H, H],
+    // row 6: mustache
+    [H, H, S, M, M, M, M, M, S, H, H],
+    // row 7: mouth / chin
+    [_, H, S, S, P, P, P, S, S, H, _],
+    // row 8: shirt shoulders (skin = visible hands at sides)
+    [_, S, LB, LB, LB, LB, LB, LB, LB, S, _],
+    // row 9: wide shirt torso (stocky Mario build)
+    [S, LB, LB, LB, DB, LB, DB, LB, LB, LB, S],
+    // row 10: shirt / belt line
+    [_, LB, DN, DN, DN, DN, DN, DN, DN, LB, _],
+    // row 11: pants waist
+    [_, _, DN, DN, DN, _, DN, DN, DN, _, _],
   ];
 
-  // Draw
-  for (let row = 0; row < body.length && row < 16; row++) {
+  for (let row = 0; row < body.length; row++) {
     for (let col = 0; col < 11; col++) {
-      const color = body[row] ? body[row][col] : null;
+      const color = body[row][col];
       if (!color) continue;
       ctx.fillStyle = color;
       ctx.fillRect(
@@ -427,6 +276,19 @@ function drawChar(x, y, frame, facingRight, jumping) {
     }
   }
 
+  // --- Draw FRONT leg & arm (in front of body) ---
+  drawLimb(hipRX, hipY, -swing, upperLegLen, lowerLegLen, DN, W, legThick);
+  drawLimb(
+    shoulderRX,
+    shoulderY,
+    -swing,
+    upperArmLen,
+    forearmLen,
+    LB,
+    S,
+    armThick,
+  );
+
   // If user uploaded a photo, draw it as a small face overlay
   if (userPhoto) {
     ctx.save();
@@ -434,7 +296,7 @@ function drawChar(x, y, frame, facingRight, jumping) {
     const faceX = Math.round(px);
     const faceY = Math.round(3 * py);
     const faceW = Math.round(9 * px);
-    const faceH = Math.round(4 * py);
+    const faceH = Math.round(5 * py);
     ctx.rect(faceX, faceY, faceW, faceH);
     ctx.clip();
     ctx.drawImage(userPhoto, faceX, faceY, faceW, faceH);
@@ -533,6 +395,7 @@ function createCharacter(groundY) {
     facingRight: true,
     walkFrame: 0,
     walkTimer: 0,
+    limbPhase: 0,
     jumpsLeft: 1, // allow 1 extra coyote jump
     coyoteTime: 0,
     jumpBuffer: 0,
@@ -551,6 +414,7 @@ function initWorld() {
   cameraX = 0;
   score = 0;
   coinCount = 0;
+  initBgFlyers();
 }
 
 // ============================================================
@@ -625,8 +489,12 @@ function updatePlayer() {
       player.walkTimer = 0;
       player.walkFrame = (player.walkFrame + 1) % 3;
     }
+    // Smooth limb swing — speed scales with movement
+    player.limbPhase += Math.abs(player.vx) * 0.18;
   } else if (player.onGround) {
     player.walkFrame = 0;
+    // Ease limb phase back to neutral
+    player.limbPhase *= 0.8;
   }
 }
 
@@ -728,6 +596,228 @@ function updateCoins() {
 
 // --- Sky + background ---
 let bgTime = 0;
+
+// --- Background flying objects ---
+const bgBirds = [];
+const bgCrashEvent = { plane: null, ptero: null, phase: "flying", timer: 0, debris: [] };
+
+function initBgFlyers() {
+  bgBirds.length = 0;
+  // Create several bird flocks
+  for (let f = 0; f < 4; f++) {
+    const flock = {
+      x: Math.random() * 3000 - 500,
+      y: 30 + Math.random() * (H * 0.25),
+      speed: 0.4 + Math.random() * 0.6,
+      dir: Math.random() < 0.5 ? 1 : -1,
+      birds: [],
+    };
+    const count = 3 + Math.floor(Math.random() * 4);
+    for (let b = 0; b < count; b++) {
+      flock.birds.push({
+        ox: (b % 3) * 14 - 14 + Math.random() * 4,
+        oy: Math.floor(b / 3) * 10 + Math.random() * 4,
+        wingPhase: Math.random() * Math.PI * 2,
+      });
+    }
+    bgBirds.push(flock);
+  }
+
+  // Airplane + Pterodactyl crash event
+  bgCrashEvent.phase = "flying";
+  bgCrashEvent.timer = 0;
+  bgCrashEvent.debris = [];
+  bgCrashEvent.plane = {
+    x: -200,
+    y: 50 + Math.random() * (H * 0.15),
+    speed: 1.8,
+  };
+  bgCrashEvent.ptero = {
+    x: W + 200,
+    y: 60 + Math.random() * (H * 0.15),
+    speed: 1.4,
+    wingPhase: 0,
+  };
+}
+
+function updateBgFlyers() {
+  // Update bird flocks
+  bgBirds.forEach((flock) => {
+    flock.x += flock.speed * flock.dir;
+    // Wrap around when off screen (in world coords)
+    if (flock.dir > 0 && flock.x > cameraX + W + 200) flock.x = cameraX - 200;
+    if (flock.dir < 0 && flock.x < cameraX - 200) flock.x = cameraX + W + 200;
+    flock.birds.forEach((b) => {
+      b.wingPhase += 0.12;
+    });
+  });
+
+  // Update crash event
+  const ce = bgCrashEvent;
+  if (ce.phase === "flying") {
+    ce.plane.x += ce.plane.speed;
+    ce.ptero.x -= ce.ptero.speed;
+    ce.ptero.wingPhase += 0.08;
+
+    // Check collision (meeting in the middle)
+    const dist = Math.abs(ce.plane.x - ce.ptero.x);
+    if (dist < 30) {
+      ce.phase = "crash";
+      ce.timer = 0;
+      // midpoint
+      const mx = (ce.plane.x + ce.ptero.x) / 2;
+      const my = (ce.plane.y + ce.ptero.y) / 2;
+      // Spawn debris
+      for (let i = 0; i < 12; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 3;
+        ce.debris.push({
+          x: mx,
+          y: my,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 1,
+          size: 2 + Math.random() * 4,
+          color: ["#ccc", "#888", "#e44", "#ff0", "#5a5", "#fff"][Math.floor(Math.random() * 6)],
+          life: 80 + Math.random() * 60,
+        });
+      }
+    }
+  } else if (ce.phase === "crash") {
+    ce.timer++;
+    ce.debris.forEach((d) => {
+      d.x += d.vx;
+      d.y += d.vy;
+      d.vy += 0.04; // gravity
+      d.life--;
+    });
+    ce.debris = ce.debris.filter((d) => d.life > 0);
+    // Reset after debris clears
+    if (ce.timer > 200) {
+      ce.phase = "flying";
+      ce.timer = 0;
+      ce.debris = [];
+      ce.plane.x = cameraX - 300 - Math.random() * 200;
+      ce.plane.y = 40 + Math.random() * (H * 0.18);
+      ce.ptero.x = cameraX + W + 300 + Math.random() * 200;
+      ce.ptero.y = 50 + Math.random() * (H * 0.18);
+    }
+  }
+}
+
+function drawPixelBird(x, y, wingPhase, dir) {
+  const s = 2; // pixel scale
+  const wingUp = Math.sin(wingPhase) > 0;
+  ctx.fillStyle = "#222";
+  // Body
+  ctx.fillRect(x, y, s * 3, s);
+  // Head
+  ctx.fillRect(x + (dir > 0 ? s * 3 : -s), y - s * 0.5, s, s);
+  // Wings
+  if (wingUp) {
+    ctx.fillRect(x + s, y - s * 2, s, s * 2);
+  } else {
+    ctx.fillRect(x + s, y + s, s, s * 2);
+  }
+}
+
+function drawPixelPlane(x, y) {
+  const s = 3;
+  // Fuselage
+  ctx.fillStyle = "#ccc";
+  ctx.fillRect(x - s * 5, y - s, s * 10, s * 2);
+  // Cockpit
+  ctx.fillStyle = "#68c";
+  ctx.fillRect(x + s * 4, y - s, s * 2, s * 2);
+  // Wings
+  ctx.fillStyle = "#aaa";
+  ctx.fillRect(x - s * 2, y - s * 3, s * 4, s);
+  ctx.fillRect(x - s * 2, y + s * 2, s * 4, s);
+  // Tail
+  ctx.fillStyle = "#e44";
+  ctx.fillRect(x - s * 5, y - s * 3, s * 2, s * 2);
+  ctx.fillRect(x - s * 5, y + s, s * 2, s * 2);
+  // Propeller
+  ctx.fillStyle = "#444";
+  const propAngle = bgTime * 200;
+  const pLen = Math.sin(propAngle) * s * 3;
+  ctx.fillRect(x + s * 5, y - Math.abs(pLen), s, Math.abs(pLen) * 2 || s);
+}
+
+function drawPixelPtero(x, y, wingPhase) {
+  const s = 3;
+  const wingAngle = Math.sin(wingPhase);
+  // Body
+  ctx.fillStyle = "#5a4030";
+  ctx.fillRect(x - s * 3, y - s, s * 6, s * 2);
+  // Head + beak
+  ctx.fillStyle = "#6b5040";
+  ctx.fillRect(x - s * 4, y - s * 2, s * 2, s * 2);
+  // Crest
+  ctx.fillStyle = "#c44";
+  ctx.fillRect(x - s * 3, y - s * 3, s, s);
+  // Beak
+  ctx.fillStyle = "#e80";
+  ctx.fillRect(x - s * 6, y - s, s * 2, s);
+  // Eye
+  ctx.fillStyle = "#ff0";
+  ctx.fillRect(x - s * 4, y - s * 2, s * 0.8, s * 0.8);
+  // Wings
+  ctx.fillStyle = "#7a6050";
+  const wingOffset = wingAngle * s * 4;
+  ctx.fillRect(x - s * 2, y - s - Math.abs(wingOffset), s * 5, s * 0.8);
+  ctx.fillRect(x - s * 2, y + s + Math.abs(wingOffset) * 0.5, s * 5, s * 0.8);
+}
+
+function drawBgFlyers() {
+  const parallax = 0.2;
+
+  // Draw bird flocks
+  bgBirds.forEach((flock) => {
+    const sx = flock.x - cameraX * parallax;
+    flock.birds.forEach((b) => {
+      const bx = sx + b.ox * flock.dir;
+      const by = flock.y + b.oy;
+      if (bx > -20 && bx < W + 20) {
+        drawPixelBird(bx, by, b.wingPhase, flock.dir);
+      }
+    });
+  });
+
+  // Draw plane + ptero crash
+  const ce = bgCrashEvent;
+  if (ce.phase === "flying") {
+    const px = ce.plane.x - cameraX * parallax;
+    const ptx = ce.ptero.x - cameraX * parallax;
+    if (px > -100 && px < W + 100) {
+      drawPixelPlane(px, ce.plane.y);
+    }
+    if (ptx > -100 && ptx < W + 100) {
+      drawPixelPtero(ptx, ce.ptero.y, ce.ptero.wingPhase);
+    }
+  } else if (ce.phase === "crash") {
+    // Draw debris
+    ce.debris.forEach((d) => {
+      const dx = d.x - cameraX * parallax;
+      if (dx > -20 && dx < W + 20) {
+        ctx.globalAlpha = Math.min(1, d.life / 40);
+        ctx.fillStyle = d.color;
+        ctx.fillRect(dx, d.y, d.size, d.size);
+      }
+    });
+    ctx.globalAlpha = 1;
+
+    // Flash on impact
+    if (ce.timer < 4) {
+      ctx.globalAlpha = 0.3 - ce.timer * 0.07;
+      ctx.fillStyle = "#fff";
+      const mx = ((ce.plane.x + ce.ptero.x) / 2) - cameraX * parallax;
+      ctx.beginPath();
+      ctx.arc(mx, (ce.plane.y + ce.ptero.y) / 2, 30 + ce.timer * 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
 
 function drawBackground() {
   bgTime += 0.005;
@@ -1118,6 +1208,7 @@ function gameLoop(ts) {
   if (gameState === STATE.PLAYING || gameState === STATE.MODAL) {
     // Draw world
     drawBackground();
+    drawBgFlyers();
     drawClouds();
     drawGround();
     drawPipes();
@@ -1131,6 +1222,7 @@ function gameLoop(ts) {
       updatePlayer();
       updateCamera();
       updateCoins();
+      updateBgFlyers();
       checkLevelEnd();
     }
   }
@@ -1215,40 +1307,164 @@ function closeModal() {
   gameState = STATE.PLAYING;
 }
 
+// ============================================================
+// RESUME MODAL
+// ============================================================
+function showResume() {
+  const overlay = $("resume-overlay");
+  const body = $("resume-body");
+  const r = RESUME_DATA;
+
+  $("resume-title").textContent = r.name;
+
+  let html = "";
+  html += `<div class="resume-contact">${r.contact}</div>`;
+  html += `<div class="resume-headline">${r.headline}</div>`;
+  html += `<div class="resume-summary">${r.summary}</div>`;
+
+  // Skills
+  html += `<div class="resume-section-title">⌨ TECHNICAL SKILLS</div>`;
+  html += `<div class="resume-skills">`;
+  r.skills.forEach((s) => {
+    html += `<span class="resume-skill-tag">${s}</span>`;
+  });
+  html += `</div>`;
+
+  // Experience
+  html += `<div class="resume-section-title">⚔ EXPERIENCE</div>`;
+  r.experience.forEach((job) => {
+    html += `<div class="resume-job">`;
+    html += `<div class="resume-job-header">`;
+    html += `<div><div class="resume-job-role">${job.role}</div>`;
+    html += `<div class="resume-job-company">${job.company} — ${job.location}</div></div>`;
+    html += `<div class="resume-job-dates">${job.dates}</div>`;
+    html += `</div>`;
+    html += `<ul class="resume-job-bullets">`;
+    job.bullets.forEach((b) => {
+      html += `<li>${b}</li>`;
+    });
+    html += `</ul></div>`;
+  });
+
+  // Education
+  html += `<div class="resume-section-title">🎓 EDUCATION</div>`;
+  r.education.forEach((edu) => {
+    html += `<div class="resume-edu">`;
+    html += `<div><div class="resume-edu-school">${edu.school}</div>`;
+    html += `<div class="resume-edu-degree">${edu.degree}</div></div>`;
+    html += `<div class="resume-edu-year">${edu.year}</div>`;
+    html += `</div>`;
+  });
+
+  body.innerHTML = html;
+  overlay.classList.add("active");
+}
+
+function closeResume() {
+  $("resume-overlay").classList.remove("active");
+}
+
 // Wire modal close button — moved to BOOT section below
 
 // ============================================================
 // END SCREEN
 // ============================================================
-function showEndScreen() {
+function showEndScreen(skipped) {
   if (gameState === STATE.END) return;
   gameState = STATE.END;
 
   const endScreen = $("end-screen");
   endScreen.classList.add("active");
 
-  $("end-score-val").textContent = String(score).padStart(6, "0");
-  $("end-coins-val").textContent = coinCount;
-  $("end-blocks-val").textContent = world
-    ? world.blocks.filter((b) => b.hit).length
-    : 0;
-  $("total-blocks-val").textContent = PROJECTS.length;
+  // Conditional header
+  if (skipped) {
+    $("end-title").textContent = "Not a gamer, huh?";
+    $("end-subtitle").textContent = "No worries — here's the full portfolio!";
+    $("end-score").style.display = "none";
+  } else {
+    $("end-title").innerHTML = "🏆 LEVEL CLEAR! 🏆";
+    $("end-subtitle").textContent = "You've explored the full portfolio!";
+    $("end-score").style.display = "";
+    $("end-score-val").textContent = String(score).padStart(6, "0");
+    $("end-coins-val").textContent = coinCount;
+    $("end-blocks-val").textContent = world
+      ? world.blocks.filter((b) => b.hit).length
+      : 0;
+    $("total-blocks-val").textContent = PROJECTS.length;
+  }
 
   // Hide HUD
   $("hud").style.display = "none";
   $("controls-hint").style.display = "none";
+
+  // Build project cards
+  const softwareGrid = $("end-software-grid");
+  const videoGrid = $("end-video-grid");
+  softwareGrid.innerHTML = "";
+  videoGrid.innerHTML = "";
+
+  PROJECTS.forEach((proj, i) => {
+    const card = document.createElement("div");
+    const isVideo = proj.type === "video";
+    card.className = "end-project-card" + (isVideo ? " video-card" : "");
+    card.style.setProperty("--delay", `${i * 0.08}s`);
+
+    let tagsHtml = "";
+    (proj.technologies || []).forEach((t) => {
+      tagsHtml += `<span class="end-card-tag">${t}</span>`;
+    });
+
+    let linksHtml = "";
+    if (proj.github) {
+      linksHtml += `<a href="${proj.github}" target="_blank" rel="noopener noreferrer" class="end-card-link">💻 GitHub</a>`;
+    }
+    if (proj.live) {
+      linksHtml += `<a href="${proj.live}" target="_blank" rel="noopener noreferrer" class="end-card-link">${isVideo ? "▶ Watch" : "🌐 Live"}</a>`;
+    }
+
+    card.innerHTML = `
+      <div class="end-card-type">${isVideo ? "▶ VIDEO" : "◆ SOFTWARE"}</div>
+      <div class="end-card-title">${proj.title}</div>
+      <div class="end-card-subtitle">${proj.subtitle || ""}</div>
+      <div class="end-card-desc">${proj.description}</div>
+      <div class="end-card-tags">${tagsHtml}</div>
+      <div class="end-card-links">${linksHtml}</div>
+    `;
+
+    // Click card to open full project modal
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".end-card-link")) return; // don't hijack link clicks
+      showModal(proj);
+    });
+
+    if (isVideo) {
+      videoGrid.appendChild(card);
+    } else {
+      softwareGrid.appendChild(card);
+    }
+  });
 
   // Build social buttons
   const grid = $("social-links-grid");
   grid.innerHTML = "";
   Object.entries(SOCIAL_LINKS).forEach(([key, link], i) => {
     const a = document.createElement("a");
-    a.href = link.url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
     a.className = "social-btn";
-    a.style.setProperty("--delay", `${i * 0.12}s`);
+    a.style.setProperty("--delay", `${(PROJECTS.length + i) * 0.08}s`);
     a.innerHTML = `<span class="social-icon">${link.icon}</span>${link.label}`;
+
+    if (key === "resume") {
+      a.href = "#";
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        showResume();
+      });
+    } else {
+      a.href = link.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+    }
+
     grid.appendChild(a);
   });
 
@@ -1259,8 +1475,13 @@ function showEndScreen() {
       "click",
       () => {
         endScreen.classList.remove("active");
+        $("end-score").style.display = "";
         initWorld();
         gameState = STATE.PLAYING;
+        $("game-screen").style.display = "block";
+        $("hud").style.display = "flex";
+        $("controls-hint").style.display = "block";
+        requestAnimationFrame(gameLoop);
       },
       { once: true },
     );
@@ -1309,8 +1530,11 @@ function setupLanding() {
     screen.appendChild(cloud);
   }
 
-  // Draw pixel avatar on canvas
-  drawLandingAvatar();
+  // Draw pixel avatar on canvas (fallback if no photo)
+  const avatarImg = $("avatar-img");
+  if (!avatarImg || !avatarImg.src || avatarImg.naturalWidth === 0) {
+    drawLandingAvatar();
+  }
 
   // Photo upload
   const hint = $("upload-hint");
@@ -1339,6 +1563,15 @@ function setupLanding() {
 
   // Start button
   $("start-btn").addEventListener("click", startGame);
+
+  // Skip button — go straight to portfolio
+  $("skip-btn").addEventListener("click", () => {
+    $("landing-screen").style.opacity = "0";
+    setTimeout(() => {
+      $("landing-screen").style.display = "none";
+      showEndScreen(true);
+    }, 600);
+  });
 }
 
 function drawLandingAvatar() {
@@ -1474,6 +1707,17 @@ document.addEventListener("DOMContentLoaded", () => {
   if (overlay) {
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) closeModal();
+    });
+  }
+
+  // Wire resume modal close
+  const resumeClose = $("resume-close");
+  if (resumeClose) resumeClose.addEventListener("click", closeResume);
+
+  const resumeOverlay = $("resume-overlay");
+  if (resumeOverlay) {
+    resumeOverlay.addEventListener("click", (e) => {
+      if (e.target === resumeOverlay) closeResume();
     });
   }
 
