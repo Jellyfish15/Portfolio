@@ -599,7 +599,21 @@ let bgTime = 0;
 
 // --- Background flying objects ---
 const bgBirds = [];
-const bgCrashEvent = { plane: null, ptero: null, phase: "flying", timer: 0, debris: [] };
+const bgCrashEvent = {
+  plane: null,
+  ptero: null,
+  phase: "flying",
+  timer: 0,
+  debris: [],
+};
+const bgShootEvent = {
+  plane: null,
+  phase: "approaching",
+  timer: 0,
+  bullets: [],
+  fallingBirds: [],
+  targetFlock: -1,
+};
 
 function initBgFlyers() {
   bgBirds.length = 0;
@@ -615,8 +629,8 @@ function initBgFlyers() {
     const count = 3 + Math.floor(Math.random() * 4);
     for (let b = 0; b < count; b++) {
       flock.birds.push({
-        ox: (b % 3) * 14 - 14 + Math.random() * 4,
-        oy: Math.floor(b / 3) * 10 + Math.random() * 4,
+        ox: (b % 3) * 28 - 28 + Math.random() * 8,
+        oy: Math.floor(b / 3) * 22 + Math.random() * 8,
         wingPhase: Math.random() * Math.PI * 2,
       });
     }
@@ -637,6 +651,18 @@ function initBgFlyers() {
     y: 60 + Math.random() * (H * 0.15),
     speed: 1.4,
     wingPhase: 0,
+  };
+
+  // Shooting event — plane shoots down a flock
+  bgShootEvent.phase = "approaching";
+  bgShootEvent.timer = 0;
+  bgShootEvent.bullets = [];
+  bgShootEvent.fallingBirds = [];
+  bgShootEvent.targetFlock = 1; // target the second flock
+  bgShootEvent.plane = {
+    x: -400,
+    y: 0, // will be set to match flock y
+    speed: 2.2,
   };
 }
 
@@ -661,7 +687,7 @@ function updateBgFlyers() {
 
     // Check collision (meeting in the middle)
     const dist = Math.abs(ce.plane.x - ce.ptero.x);
-    if (dist < 30) {
+    if (dist < 60) {
       ce.phase = "crash";
       ce.timer = 0;
       // midpoint
@@ -677,7 +703,9 @@ function updateBgFlyers() {
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed - 1,
           size: 2 + Math.random() * 4,
-          color: ["#ccc", "#888", "#e44", "#ff0", "#5a5", "#fff"][Math.floor(Math.random() * 6)],
+          color: ["#ccc", "#888", "#e44", "#ff0", "#5a5", "#fff"][
+            Math.floor(Math.random() * 6)
+          ],
           life: 80 + Math.random() * 60,
         });
       }
@@ -702,70 +730,314 @@ function updateBgFlyers() {
       ce.ptero.y = 50 + Math.random() * (H * 0.18);
     }
   }
-}
 
-function drawPixelBird(x, y, wingPhase, dir) {
-  const s = 2; // pixel scale
-  const wingUp = Math.sin(wingPhase) > 0;
-  ctx.fillStyle = "#222";
-  // Body
-  ctx.fillRect(x, y, s * 3, s);
-  // Head
-  ctx.fillRect(x + (dir > 0 ? s * 3 : -s), y - s * 0.5, s, s);
-  // Wings
-  if (wingUp) {
-    ctx.fillRect(x + s, y - s * 2, s, s * 2);
-  } else {
-    ctx.fillRect(x + s, y + s, s, s * 2);
+  // Update shoot event
+  const se = bgShootEvent;
+  const groundY = H - GROUND_H;
+  const targetFlock = bgBirds[se.targetFlock];
+
+  if (se.phase === "approaching" && targetFlock) {
+    // Plane flies toward the flock from the left
+    se.plane.y = targetFlock.y;
+    se.plane.x += se.plane.speed;
+    // When close enough, start shooting
+    if (se.plane.x > targetFlock.x - 150) {
+      se.phase = "shooting";
+      se.timer = 0;
+    }
+  } else if (se.phase === "shooting" && targetFlock) {
+    se.plane.x += se.plane.speed * 0.6; // slow down while shooting
+    se.timer++;
+    // Fire bullets at intervals
+    if (se.timer % 8 === 0 && se.timer <= 48) {
+      se.bullets.push({
+        x: se.plane.x + 30,
+        y: se.plane.y,
+        vx: 4,
+        vy: 0.5 + Math.random() * 0.5,
+      });
+    }
+    // Check bullet-bird hits
+    se.bullets.forEach((bullet) => {
+      bullet.x += bullet.vx;
+      bullet.y += bullet.vy;
+    });
+    // Check if bullets reach the flock area
+    if (targetFlock.birds.length > 0) {
+      se.bullets.forEach((bullet) => {
+        const flockScreenX = targetFlock.x;
+        if (
+          bullet.x > flockScreenX - 40 &&
+          bullet.x < flockScreenX + 60 &&
+          Math.abs(bullet.y - targetFlock.y) < 40
+        ) {
+          // Hit a bird!
+          const bird = targetFlock.birds.pop();
+          if (bird) {
+            se.fallingBirds.push({
+              x: targetFlock.x + bird.ox * targetFlock.dir,
+              y: targetFlock.y + bird.oy,
+              vy: 0,
+              vx: targetFlock.dir * 0.3,
+              rot: 0,
+              rotSpeed: (Math.random() - 0.5) * 0.15,
+              wingPhase: bird.wingPhase, // frozen wings
+            });
+            bullet.x = 9999; // mark as used
+          }
+        }
+      });
+    }
+    se.bullets = se.bullets.filter(
+      (b) => b.x < cameraX + W + 100 && b.x !== 9999,
+    );
+    // Move on once done shooting
+    if (se.timer > 70) {
+      se.phase = "flyaway";
+    }
+  } else if (se.phase === "flyaway") {
+    se.plane.x += se.plane.speed * 1.5; // zoom off
+    // Update falling birds
+    se.fallingBirds.forEach((fb) => {
+      fb.vy += 0.08; // gravity
+      fb.y += fb.vy;
+      fb.x += fb.vx;
+      fb.rot += fb.rotSpeed;
+    });
+    // Remove birds that hit the ground
+    se.fallingBirds = se.fallingBirds.filter((fb) => fb.y < groundY + 10);
+    // Reset once plane is gone and birds have landed
+    if (se.plane.x > cameraX + W + 400 && se.fallingBirds.length === 0) {
+      se.phase = "cooldown";
+      se.timer = 0;
+    }
+  } else if (se.phase === "cooldown") {
+    se.timer++;
+    if (se.timer > 300) {
+      // Respawn the target flock's birds and reset
+      const flock = bgBirds[se.targetFlock];
+      if (flock) {
+        flock.birds = [];
+        const count = 3 + Math.floor(Math.random() * 4);
+        for (let b = 0; b < count; b++) {
+          flock.birds.push({
+            ox: (b % 3) * 28 - 28 + Math.random() * 8,
+            oy: Math.floor(b / 3) * 22 + Math.random() * 8,
+            wingPhase: Math.random() * Math.PI * 2,
+          });
+        }
+      }
+      se.phase = "approaching";
+      se.timer = 0;
+      se.bullets = [];
+      se.fallingBirds = [];
+      se.plane.x = cameraX - 500 - Math.random() * 300;
+      // Pick a random flock to target next
+      se.targetFlock = Math.floor(Math.random() * bgBirds.length);
+    }
   }
 }
 
-function drawPixelPlane(x, y) {
-  const s = 3;
-  // Fuselage
-  ctx.fillStyle = "#ccc";
-  ctx.fillRect(x - s * 5, y - s, s * 10, s * 2);
-  // Cockpit
-  ctx.fillStyle = "#68c";
-  ctx.fillRect(x + s * 4, y - s, s * 2, s * 2);
-  // Wings
-  ctx.fillStyle = "#aaa";
-  ctx.fillRect(x - s * 2, y - s * 3, s * 4, s);
-  ctx.fillRect(x - s * 2, y + s * 2, s * 4, s);
+function drawPixelBird(x, y, wingPhase, dir) {
+  const s = 4; // bigger pixel scale
+  const wing = Math.sin(wingPhase);
+  const flip = dir < 0 ? -1 : 1;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(flip, 1);
+
+  // Body (dark brown)
+  ctx.fillStyle = "#3a2a1a";
+  ctx.fillRect(0, 0, s * 4, s);
+  ctx.fillRect(s, -s, s * 2, s);
+  // Belly (lighter)
+  ctx.fillStyle = "#6b5040";
+  ctx.fillRect(s, s, s * 2, s);
+  // Head
+  ctx.fillStyle = "#3a2a1a";
+  ctx.fillRect(s * 4, -s, s, s * 2);
+  // Eye
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(s * 4, -s, s, s);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(s * 4 + s * 0.4, -s + s * 0.2, s * 0.5, s * 0.5);
+  // Beak
+  ctx.fillStyle = "#e8a020";
+  ctx.fillRect(s * 5, 0, s, s);
   // Tail
-  ctx.fillStyle = "#e44";
-  ctx.fillRect(x - s * 5, y - s * 3, s * 2, s * 2);
-  ctx.fillRect(x - s * 5, y + s, s * 2, s * 2);
-  // Propeller
+  ctx.fillStyle = "#3a2a1a";
+  ctx.fillRect(-s, -s, s, s);
+  ctx.fillRect(-s * 2, -s * 2, s, s);
+  // Wings (animated)
+  const wingY = wing * s * 3;
+  ctx.fillStyle = "#4a3828";
+  ctx.fillRect(s, -s * 2 + wingY, s * 3, s);
+  ctx.fillRect(s * 2, -s * 3 + wingY, s * 2, s);
+
+  ctx.restore();
+}
+
+function drawPixelPlane(x, y) {
+  const s = 4; // bigger pixels
+  ctx.save();
+  ctx.translate(x, y);
+
+  // --- Green biplane inspired by reference ---
+  // Fuselage (main body)
+  ctx.fillStyle = "#4acd4a";
+  ctx.fillRect(-s * 5, -s, s * 10, s * 3);
+  // Fuselage highlight
+  ctx.fillStyle = "#6de86d";
+  ctx.fillRect(-s * 4, -s, s * 8, s);
+  // Fuselage dark underside
+  ctx.fillStyle = "#2a8a2a";
+  ctx.fillRect(-s * 4, s, s * 8, s);
+
+  // Upper wing
+  ctx.fillStyle = "#3bba3b";
+  ctx.fillRect(-s * 7, -s * 4, s * 14, s * 2);
+  ctx.fillStyle = "#5ad65a";
+  ctx.fillRect(-s * 6, -s * 4, s * 12, s);
+  // Upper wing tips
+  ctx.fillStyle = "#c8ff50";
+  ctx.fillRect(s * 6, -s * 4, s * 2, s * 2);
+  ctx.fillRect(-s * 8, -s * 3, s, s);
+
+  // Lower wing
+  ctx.fillStyle = "#80e880";
+  ctx.fillRect(-s * 6, s * 2, s * 12, s * 2);
+  ctx.fillStyle = "#a0f0a0";
+  ctx.fillRect(-s * 5, s * 2, s * 10, s);
+
+  // Wing struts
+  ctx.fillStyle = "#2a6a2a";
+  ctx.fillRect(-s * 3, -s * 2, s, s);
+  ctx.fillRect(s * 3, -s * 2, s, s);
+
+  // Cockpit
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-s, -s * 2, s * 3, s);
+  ctx.fillStyle = "#88bbdd";
+  ctx.fillRect(-s, -s * 2, s * 2, s);
+  // Cockpit frame
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-s * 2, -s * 2, s, s);
+  ctx.fillRect(s * 2, -s * 2, s, s);
+
+  // Nose cone
+  ctx.fillStyle = "#2a8a2a";
+  ctx.fillRect(s * 5, -s, s * 2, s * 2);
+  ctx.fillStyle = "#1e6e1e";
+  ctx.fillRect(s * 6, 0, s, s);
+
+  // Tail fin (vertical)
+  ctx.fillStyle = "#3bba3b";
+  ctx.fillRect(-s * 6, -s * 3, s * 2, s * 2);
+  ctx.fillStyle = "#4acd4a";
+  ctx.fillRect(-s * 7, -s * 4, s * 2, s);
+  // Tail fin (horizontal)
+  ctx.fillRect(-s * 7, s, s * 3, s);
+
+  // Propeller (spinning)
+  ctx.fillStyle = "#bbed50";
+  const propSpin = bgTime * 300;
+  const pLen = Math.sin(propSpin) * s * 4;
+  ctx.fillRect(s * 7, -Math.abs(pLen), s, Math.abs(pLen) * 2 || s);
+  // Second blade (90 degrees offset)
+  const pLen2 = Math.cos(propSpin) * s * 4;
+  ctx.fillRect(s * 7, -Math.abs(pLen2), s, Math.abs(pLen2) * 2 || s);
+  // Hub
   ctx.fillStyle = "#444";
-  const propAngle = bgTime * 200;
-  const pLen = Math.sin(propAngle) * s * 3;
-  ctx.fillRect(x + s * 5, y - Math.abs(pLen), s, Math.abs(pLen) * 2 || s);
+  ctx.fillRect(s * 7, -s * 0.5, s, s);
+
+  // Outline accents
+  ctx.fillStyle = "#1a5a1a";
+  ctx.fillRect(-s * 5, s * 2, s * 10, s * 0.5);
+
+  ctx.restore();
 }
 
 function drawPixelPtero(x, y, wingPhase) {
-  const s = 3;
+  const s = 4; // bigger pixels
   const wingAngle = Math.sin(wingPhase);
-  // Body
-  ctx.fillStyle = "#5a4030";
-  ctx.fillRect(x - s * 3, y - s, s * 6, s * 2);
-  // Head + beak
-  ctx.fillStyle = "#6b5040";
-  ctx.fillRect(x - s * 4, y - s * 2, s * 2, s * 2);
-  // Crest
-  ctx.fillStyle = "#c44";
-  ctx.fillRect(x - s * 3, y - s * 3, s, s);
-  // Beak
-  ctx.fillStyle = "#e80";
-  ctx.fillRect(x - s * 6, y - s, s * 2, s);
+  ctx.save();
+  ctx.translate(x, y);
+
+  // --- Salmon/brown pterodactyl inspired by reference ---
+  const wingY = wingAngle * s * 5;
+
+  // Upper left wing
+  ctx.fillStyle = "#e8a898";
+  ctx.fillRect(-s * 8, -s * 2 + wingY, s * 6, s * 2);
+  ctx.fillStyle = "#d48878";
+  ctx.fillRect(-s * 10, -s * 4 + wingY * 1.2, s * 4, s * 2);
+  ctx.fillStyle = "#c07868";
+  ctx.fillRect(-s * 11, -s * 5 + wingY * 1.4, s * 2, s);
+  // Wing membrane detail
+  ctx.fillStyle = "#dba090";
+  ctx.fillRect(-s * 7, -s + wingY * 0.5, s * 5, s);
+
+  // Upper right wing
+  ctx.fillStyle = "#e8a898";
+  ctx.fillRect(s * 2, -s * 2 + wingY, s * 6, s * 2);
+  ctx.fillStyle = "#d48878";
+  ctx.fillRect(s * 6, -s * 4 + wingY * 1.2, s * 4, s * 2);
+  ctx.fillStyle = "#c07868";
+  ctx.fillRect(s * 9, -s * 5 + wingY * 1.4, s * 2, s);
+  // Wing membrane detail
+  ctx.fillStyle = "#dba090";
+  ctx.fillRect(s * 3, -s + wingY * 0.5, s * 5, s);
+
+  // Body (central mass)
+  ctx.fillStyle = "#b06858";
+  ctx.fillRect(-s * 2, -s, s * 5, s * 3);
+  // Body highlight
+  ctx.fillStyle = "#d48878";
+  ctx.fillRect(-s, -s, s * 3, s);
+  // Body underside
+  ctx.fillStyle = "#8a4838";
+  ctx.fillRect(-s, s, s * 3, s);
+
+  // Neck
+  ctx.fillStyle = "#b06858";
+  ctx.fillRect(s * 3, -s * 2, s * 2, s * 3);
+
+  // Head
+  ctx.fillStyle = "#c07868";
+  ctx.fillRect(s * 5, -s * 3, s * 3, s * 3);
+  // Head crest
+  ctx.fillStyle = "#b06858";
+  ctx.fillRect(s * 5, -s * 4, s * 2, s);
+  ctx.fillRect(s * 4, -s * 5, s, s);
+
+  // Beak (long, pointing right)
+  ctx.fillStyle = "#8a4838";
+  ctx.fillRect(s * 8, -s * 2, s * 3, s);
+  ctx.fillRect(s * 10, -s, s * 2, s);
+  ctx.fillStyle = "#704030";
+  ctx.fillRect(s * 11, -s * 2, s, s);
+
   // Eye
-  ctx.fillStyle = "#ff0";
-  ctx.fillRect(x - s * 4, y - s * 2, s * 0.8, s * 0.8);
-  // Wings
-  ctx.fillStyle = "#7a6050";
-  const wingOffset = wingAngle * s * 4;
-  ctx.fillRect(x - s * 2, y - s - Math.abs(wingOffset), s * 5, s * 0.8);
-  ctx.fillRect(x - s * 2, y + s + Math.abs(wingOffset) * 0.5, s * 5, s * 0.8);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(s * 6, -s * 2, s, s);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(s * 6 + s * 0.3, -s * 2 + s * 0.3, s * 0.5, s * 0.5);
+
+  // Feet (dangling)
+  ctx.fillStyle = "#8a4838";
+  ctx.fillRect(-s, s * 2, s, s * 2);
+  ctx.fillRect(s, s * 2, s, s * 2);
+  // Claws
+  ctx.fillStyle = "#704030";
+  ctx.fillRect(-s * 2, s * 4, s * 2, s);
+  ctx.fillRect(0, s * 4, s * 2, s);
+
+  // Tail
+  ctx.fillStyle = "#b06858";
+  ctx.fillRect(-s * 3, 0, s, s * 2);
+  ctx.fillRect(-s * 4, s, s, s);
+
+  ctx.restore();
 }
 
 function drawBgFlyers() {
@@ -810,13 +1082,63 @@ function drawBgFlyers() {
     if (ce.timer < 4) {
       ctx.globalAlpha = 0.3 - ce.timer * 0.07;
       ctx.fillStyle = "#fff";
-      const mx = ((ce.plane.x + ce.ptero.x) / 2) - cameraX * parallax;
+      const mx = (ce.plane.x + ce.ptero.x) / 2 - cameraX * parallax;
       ctx.beginPath();
-      ctx.arc(mx, (ce.plane.y + ce.ptero.y) / 2, 30 + ce.timer * 10, 0, Math.PI * 2);
+      ctx.arc(
+        mx,
+        (ce.plane.y + ce.ptero.y) / 2,
+        30 + ce.timer * 10,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       ctx.globalAlpha = 1;
     }
   }
+
+  // Draw shooting event
+  const se = bgShootEvent;
+  const spx = se.plane.x - cameraX * parallax;
+
+  // Draw the shooter plane (if not in cooldown)
+  if (se.phase !== "cooldown" && spx > -100 && spx < W + 200) {
+    drawPixelPlane(spx, se.plane.y);
+  }
+
+  // Draw bullets
+  se.bullets.forEach((bullet) => {
+    const bx = bullet.x - cameraX * parallax;
+    if (bx > -10 && bx < W + 10) {
+      // Bullet tracer
+      ctx.fillStyle = "#ff0";
+      ctx.fillRect(bx, bullet.y, 6, 2);
+      ctx.fillStyle = "#fa0";
+      ctx.fillRect(bx - 4, bullet.y, 4, 2);
+    }
+  });
+
+  // Draw falling dead birds (tumbling down)
+  se.fallingBirds.forEach((fb) => {
+    const fbx = fb.x - cameraX * parallax;
+    if (fbx > -30 && fbx < W + 30) {
+      ctx.save();
+      ctx.translate(fbx, fb.y);
+      ctx.rotate(fb.rot);
+      // Draw a simpler dead bird (legs up, no flapping)
+      const s = 4;
+      ctx.fillStyle = "#3a2a1a";
+      ctx.fillRect(-s * 2, -s, s * 4, s);
+      ctx.fillRect(-s, -s * 2, s * 2, s);
+      // X eyes
+      ctx.fillStyle = "#c00";
+      ctx.fillRect(-s * 0.3, -s * 1.5, s * 0.6, s * 0.6);
+      // Wings stuck out
+      ctx.fillStyle = "#4a3828";
+      ctx.fillRect(-s * 3, 0, s * 2, s);
+      ctx.fillRect(s * 2, 0, s * 2, s);
+      ctx.restore();
+    }
+  });
 }
 
 function drawBackground() {
