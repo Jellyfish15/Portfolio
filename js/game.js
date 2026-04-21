@@ -30,11 +30,23 @@ const ctx = canvas.getContext("2d");
 
 let W = 0,
   H = 0; // canvas logical dimensions (set in resize)
+let mobileOffsetY = 0; // vertical shift on mobile portrait so character is fully visible
 const PIXEL = 1; // drawing scale (we use native px, browser scales via CSS)
 
 function resize() {
   W = canvas.width = window.innerWidth;
   H = canvas.height = window.innerHeight;
+
+  // On mobile portrait, shift the viewport up so the character and
+  // ground section are visible (not hidden at the very bottom).
+  const isPortrait = H > W && W < 768;
+  if (isPortrait) {
+    const charTopY = H - 90 - 52; // logical y of character head (GROUND_H=90, CHAR_H=52)
+    const targetY  = H * 0.55;   // where we want the head to sit on screen
+    mobileOffsetY  = Math.max(0, Math.round(charTopY - targetY));
+  } else {
+    mobileOffsetY = 0;
+  }
 }
 window.addEventListener("resize", () => {
   resize();
@@ -1528,6 +1540,10 @@ function gameLoop(ts) {
   ctx.clearRect(0, 0, W, H);
 
   if (gameState === STATE.PLAYING || gameState === STATE.MODAL) {
+    // On mobile portrait apply an upward shift so the character and
+    // ground are visible rather than crammed at the screen edge.
+    if (mobileOffsetY > 0) ctx.save(), ctx.translate(0, -mobileOffsetY);
+
     // Draw world
     drawBackground();
     drawBgFlyers();
@@ -1538,6 +1554,23 @@ function gameLoop(ts) {
     drawCoins();
     drawCastle();
     drawPlayer();
+
+    if (mobileOffsetY > 0) {
+      ctx.restore();
+      // Fill the exposed strip below the translated canvas content
+      // with the ground's darkest colour so there's no black gap.
+      ctx.fillStyle = COL.groundDark;
+      ctx.fillRect(0, H - mobileOffsetY, W, mobileOffsetY);
+      // Thin brick lines to match the ground texture
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.lineWidth = 1;
+      const brickH = 26;
+      for (let row = 0; row * brickH < mobileOffsetY + brickH; row++) {
+        const ry = H - mobileOffsetY + row * brickH;
+        ctx.beginPath(); ctx.moveTo(0, ry); ctx.lineTo(W, ry); ctx.stroke();
+      }
+    }
+
     drawHUD();
 
     if (gameState === STATE.PLAYING) {

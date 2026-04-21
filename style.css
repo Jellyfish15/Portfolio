@@ -310,6 +310,7 @@ body {
   display: block;
   width: 100vw;
   height: 100vh;
+  height: 100dvh; /* dvh accounts for mobile browser chrome so canvas never overflows */
   image-rendering: pixelated;
   cursor: none;
 }
