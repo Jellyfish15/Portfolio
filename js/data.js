@@ -220,10 +220,22 @@ const RESUME_DATA = {
   ],
   experience: [
     {
-      role: "Junior Software Engineer Extern",
+      role: "Ambassador",
       company: "TripleTen",
       location: "Remote",
-      dates: "01/2026 - Present",
+      dates: "04/2025 - Present",
+      bullets: [
+        "Create and share content showcasing coding projects and portfolio development.",
+        "Engage with prospective students and answer questions about the program.",
+        "Build visibility through Social Media posts and community interactions.",
+        "Represent the program's brand through creative, project-based storytelling.",
+      ],
+    },
+    {
+      role: "Remote Software Engineer Intern",
+      company: "TripleTen",
+      location: "Remote",
+      dates: "01/2026 - 03/2026",
       bullets: [
         "Build and maintain full-stack application features contributing to a production-grade TypeScript-based platform serving university users.",
         "Design reusable React components and structured backend routes improving maintainability and enabling faster iterative feature delivery.",
