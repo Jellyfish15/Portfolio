@@ -296,7 +296,7 @@ const RESUME_DATA = {
 // The 'cta' is the call-to-action text on the landing page button.
 const PERSONAL_INFO = {
   name: "Gene Strelkov",
-  title: "Full-Stack Software Engineer & Videographer",
+  title: "Full-Stack Software Engineer & Content Creator",
   tagline: "Welcome to my Portfolio",
   cta: "Come Play",
 };
