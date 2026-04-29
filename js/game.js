@@ -42,8 +42,8 @@ function resize() {
   const isPortrait = H > W && W < 768;
   if (isPortrait) {
     const charTopY = H - 90 - 52; // logical y of character head (GROUND_H=90, CHAR_H=52)
-    const targetY  = H * 0.55;   // where we want the head to sit on screen
-    mobileOffsetY  = Math.max(0, Math.round(charTopY - targetY));
+    const targetY = H * 0.55; // where we want the head to sit on screen
+    mobileOffsetY = Math.max(0, Math.round(charTopY - targetY));
   } else {
     mobileOffsetY = 0;
   }
@@ -187,11 +187,11 @@ function drawChar(x, y, frame, facingRight, jumping) {
 
   // --- Limb swing angle (smooth sine wave) ---
   const phase = player ? player.limbPhase || 0 : 0;
-  const maxSwing = jumping ? 0.15 : 0.55; // radians
+  const maxSwing = jumping ? 0.12 : 0.78; // radians
   const swing = Math.sin(phase) * maxSwing;
 
-  // Helper: draw a two-segment limb from a pivot point
-  function drawLimb(
+  // Helper: draw connected two-segment limb from a pivot point
+  function drawLeg(
     pivotX,
     pivotY,
     angle,
@@ -209,6 +209,9 @@ function drawChar(x, y, frame, facingRight, jumping) {
     ctx.beginPath();
     ctx.roundRect(-thick / 2, 0, thick, upperLen, thick / 3);
     ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, thick * 0.36, 0, Math.PI * 2);
+    ctx.fill();
     // Lower segment with slight knee/elbow bend
     ctx.translate(0, upperLen);
     ctx.rotate(Math.abs(angle) * 0.35);
@@ -216,6 +219,44 @@ function drawChar(x, y, frame, facingRight, jumping) {
     ctx.beginPath();
     ctx.roundRect(-thick / 2, 0, thick, lowerLen, thick / 3);
     ctx.fill();
+    ctx.restore();
+  }
+
+  // Arm rig: shoulders stay anchored while forearms sweep inward/outward.
+  function drawArm(shoulderX, shoulderY, phaseOffset, upperCol, handCol, thick) {
+    const sideSign = shoulderX < cw / 2 ? -1 : 1;
+    const armWave = Math.sin(phase + phaseOffset) * maxSwing;
+    const upperLen = py * 2.1;
+    const lowerLen = py * 1.9;
+
+    // Base pose angles arms slightly inward toward torso center.
+    const shoulderAngle = sideSign * 0.22 + armWave * 0.95;
+    const elbowAngle = sideSign * 0.34 + armWave * 0.38;
+
+    ctx.save();
+    ctx.translate(shoulderX, shoulderY);
+    ctx.rotate(shoulderAngle);
+
+    // Upper arm + shoulder joint
+    ctx.fillStyle = upperCol;
+    ctx.beginPath();
+    ctx.roundRect(-thick / 2, 0, thick, upperLen, thick / 2.8);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, thick * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Elbow + forearm sweeps across the body when phase flips.
+    ctx.translate(0, upperLen);
+    ctx.rotate(elbowAngle);
+    ctx.fillStyle = handCol;
+    ctx.beginPath();
+    ctx.roundRect(-thick / 2, 0, thick, lowerLen, thick / 3);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, thick * 0.34, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.restore();
   }
 
@@ -234,17 +275,8 @@ function drawChar(x, y, frame, facingRight, jumping) {
   const hipY = py * 12;
 
   // --- Draw BACK arm & leg (behind body) ---
-  drawLimb(
-    shoulderLX,
-    shoulderY,
-    swing,
-    upperArmLen,
-    forearmLen,
-    LB,
-    S,
-    armThick,
-  );
-  drawLimb(hipLX, hipY, swing, upperLegLen, lowerLegLen, DN, W, legThick);
+  drawArm(shoulderLX, shoulderY, 0, LB, S, armThick);
+  drawLeg(hipLX, hipY, swing, upperLegLen, lowerLegLen, DN, W, legThick);
 
   // --- Body grid (12 rows: stocky Mario-like proportions) ---
   const body = [
@@ -289,17 +321,8 @@ function drawChar(x, y, frame, facingRight, jumping) {
   }
 
   // --- Draw FRONT leg & arm (in front of body) ---
-  drawLimb(hipRX, hipY, -swing, upperLegLen, lowerLegLen, DN, W, legThick);
-  drawLimb(
-    shoulderRX,
-    shoulderY,
-    -swing,
-    upperArmLen,
-    forearmLen,
-    LB,
-    S,
-    armThick,
-  );
+  drawLeg(hipRX, hipY, -swing, upperLegLen, lowerLegLen, DN, W, legThick);
+  drawArm(shoulderRX, shoulderY, Math.PI, LB, S, armThick);
 
   // If user uploaded a photo, draw it as a small face overlay
   if (userPhoto) {
@@ -1542,7 +1565,7 @@ function gameLoop(ts) {
   if (gameState === STATE.PLAYING || gameState === STATE.MODAL) {
     // On mobile portrait apply an upward shift so the character and
     // ground are visible rather than crammed at the screen edge.
-    if (mobileOffsetY > 0) ctx.save(), ctx.translate(0, -mobileOffsetY);
+    if (mobileOffsetY > 0) (ctx.save(), ctx.translate(0, -mobileOffsetY));
 
     // Draw world
     drawBackground();
@@ -1567,7 +1590,10 @@ function gameLoop(ts) {
       const brickH = 26;
       for (let row = 0; row * brickH < mobileOffsetY + brickH; row++) {
         const ry = H - mobileOffsetY + row * brickH;
-        ctx.beginPath(); ctx.moveTo(0, ry); ctx.lineTo(W, ry); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, ry);
+        ctx.lineTo(W, ry);
+        ctx.stroke();
       }
     }
 
