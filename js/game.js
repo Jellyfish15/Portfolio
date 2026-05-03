@@ -223,7 +223,14 @@ function drawChar(x, y, frame, facingRight, jumping) {
   }
 
   // Arm rig: shoulders stay anchored while forearms sweep inward/outward.
-  function drawArm(shoulderX, shoulderY, phaseOffset, upperCol, handCol, thick) {
+  function drawArm(
+    shoulderX,
+    shoulderY,
+    phaseOffset,
+    upperCol,
+    handCol,
+    thick,
+  ) {
     const sideSign = shoulderX < cw / 2 ? -1 : 1;
     const armWave = Math.sin(phase + phaseOffset) * maxSwing;
     const upperLen = py * 2.1;
@@ -511,9 +518,8 @@ function updatePlayer() {
     player.jumping = true;
   }
 
-  // Block collisions
+  // Block collisions (blocks remain solid even after being hit)
   world.blocks.forEach((block) => {
-    if (block.hit) return;
     collidePlayerBlock(player, block);
   });
 
@@ -556,16 +562,16 @@ function collidePlayerBlock(p, block) {
 
   if (minOverlapY < minOverlapX) {
     if (overlapTop < overlapBottom) {
-      // Player hit block from below → trigger!
-      p.y = by + bh;
-      p.vy = Math.abs(p.vy) * 0.3;
-      if (!block.hit) hitBlock(block);
-    } else {
       // Player standing on top of block
       p.y = by - ph;
       p.vy = 0;
       p.onGround = true;
       p.jumping = false;
+    } else {
+      // Player hit block from below → trigger modal/project
+      p.y = by + bh;
+      p.vy = Math.abs(p.vy) * 0.3;
+      if (!block.hit) hitBlock(block);
     }
   } else {
     if (overlapLeft < overlapRight) {
