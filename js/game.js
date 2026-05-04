@@ -640,6 +640,7 @@ let bgTime = 0;
 
 // --- Background flying objects ---
 const bgBirds = [];
+const bgTurtles = [];
 const bgCrashEvent = {
   plane: null,
   ptero: null,
@@ -667,7 +668,11 @@ function initBgFlyers() {
       dir: Math.random() < 0.5 ? 1 : -1,
       birds: [],
     };
-    const count = 3 + Math.floor(Math.random() * 4);
+    const _r = Math.random();
+    const count =
+      _r < 0.15
+        ? 5 + Math.floor(Math.random() * 2)
+        : 1 + Math.floor(Math.random() * 2);
     for (let b = 0; b < count; b++) {
       flock.birds.push({
         ox: (b % 3) * 28 - 28 + Math.random() * 8,
@@ -676,6 +681,17 @@ function initBgFlyers() {
       });
     }
     bgBirds.push(flock);
+  }
+
+  // Background turtles
+  bgTurtles.length = 0;
+  for (let t = 0; t < 3; t++) {
+    bgTurtles.push({
+      x: Math.random() * 3000,
+      speed: 0.25 + Math.random() * 0.35,
+      dir: Math.random() < 0.5 ? 1 : -1,
+      walkPhase: Math.random() * Math.PI * 2,
+    });
   }
 
   // Airplane + Pterodactyl crash event
@@ -859,7 +875,11 @@ function updateBgFlyers() {
       const flock = bgBirds[se.targetFlock];
       if (flock) {
         flock.birds = [];
-        const count = 3 + Math.floor(Math.random() * 4);
+        const _rr = Math.random();
+        const count =
+          _rr < 0.15
+            ? 5 + Math.floor(Math.random() * 2)
+            : 1 + Math.floor(Math.random() * 2);
         for (let b = 0; b < count; b++) {
           flock.birds.push({
             ox: (b % 3) * 28 - 28 + Math.random() * 8,
@@ -877,6 +897,72 @@ function updateBgFlyers() {
       se.targetFlock = Math.floor(Math.random() * bgBirds.length);
     }
   }
+
+  // Update background turtles
+  bgTurtles.forEach((t) => {
+    t.x += t.speed * t.dir;
+    t.walkPhase += 0.06;
+    if (t.dir > 0 && t.x > cameraX + W + 300) t.x = cameraX - 200;
+    if (t.dir < 0 && t.x < cameraX - 200) t.x = cameraX + W + 300;
+  });
+}
+
+function drawPixelTurtle(x, y, walkPhase, dir) {
+  const s = 3;
+  ctx.save();
+  ctx.translate(x, y);
+  if (dir < 0) ctx.scale(-1, 1);
+
+  const legBob = Math.sin(walkPhase) * 1.5;
+
+  // Legs (behind shell)
+  ctx.fillStyle = "#3a6028";
+  ctx.fillRect(-s * 3, -s * 2 + legBob, s * 2, s * 2); // back legs
+  ctx.fillRect(-s, -s * 2 - legBob, s * 2, s * 2);
+  ctx.fillRect(s, -s * 2 - legBob, s * 2, s * 2); // front legs
+  ctx.fillRect(s * 3, -s * 2 + legBob, s * 2, s * 2);
+
+  // Shell base
+  ctx.fillStyle = "#4a7a3a";
+  ctx.fillRect(-s * 4, -s * 5, s * 8, s * 3);
+  // Shell dome
+  ctx.fillStyle = "#5a9a4a";
+  ctx.fillRect(-s * 3, -s * 7, s * 6, s * 2);
+  ctx.fillRect(-s * 2, -s * 8, s * 4, s);
+  // Shell highlight
+  ctx.fillStyle = "#6ab85a";
+  ctx.fillRect(-s * 2, -s * 7, s * 2, s);
+  // Shell ridges
+  ctx.fillStyle = "#3a6a2a";
+  ctx.fillRect(-s, -s * 7, 2, s * 3);
+  ctx.fillRect(s, -s * 7, 2, s * 3);
+
+  // Head
+  ctx.fillStyle = "#5a8040";
+  ctx.fillRect(s * 4, -s * 5, s * 3, s * 2);
+  // Eye
+  ctx.fillStyle = "#111";
+  ctx.fillRect(s * 6, -s * 5, 3, 3);
+
+  // Tail
+  ctx.fillStyle = "#4a7030";
+  ctx.fillRect(-s * 5, -s * 4, s * 2, s);
+
+  ctx.restore();
+}
+
+function drawBgTurtles() {
+  if (!world) return;
+  const parallax = 0.15;
+  const groundY = H - GROUND_H;
+  ctx.globalAlpha = 0.72;
+  bgTurtles.forEach((t) => {
+    const sx = t.x - cameraX * parallax;
+    if (sx > -60 && sx < W + 60) {
+      drawPixelTurtle(sx, groundY, t.walkPhase, t.dir);
+    }
+  });
+  ctx.globalAlpha = 1;
 }
 
 function drawPixelBird(x, y, wingPhase, dir) {
@@ -1578,6 +1664,7 @@ function gameLoop(ts) {
     drawBgFlyers();
     drawClouds();
     drawGround();
+    drawBgTurtles();
     drawPipes();
     drawBlocks();
     drawCoins();
