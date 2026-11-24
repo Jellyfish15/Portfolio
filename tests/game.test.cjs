@@ -78,7 +78,52 @@ test('60,000 simulation steps keep player and effects bounded',()=>{
   g.run('initWorld(); for(let i=0;i<60000;i++){ keys.KeyD=i%600<300; keys.KeyA=!keys.KeyD; keys.Space=i%70===0; updatePlayer(); updateCamera(); updateCoins(); updateBgFlyers(); if(gameState===STATE.MODAL) closeModal(); }');
   assert.equal(g.run('[player.x,player.y,player.vx,player.vy,cameraX].every(Number.isFinite)'),true);
   assert.equal(g.run('player.x>=0 && player.x<=world.worldW-CHAR_W'),true);
-  assert.ok(g.run('bgCrashEvent.debris.length')<=12);
-  assert.ok(g.run('bgShootEvent.fallingBirds.length')<=6);
+  assert.ok(g.run('bgBirds.length')<=1);
+  assert.ok(g.run('bgPlanes.length')<=1);
+  assert.ok(g.run('bgTurtles.length')<=1);
   assert.ok(g.run('coinCount')<=18);
+});
+test('every block supports repeated vertical jumps and landing in place',()=>{
+  const g=game();
+  g.run('initWorld()');
+  for(let index=0;index<6;index++) {
+    g.run(`clearInput(); const block${index}=world.blocks[${index}]; player.x=block${index}.x+4; player.y=block${index}.y-CHAR_H; player.vx=0; player.vy=0; player.onGround=true; player.coyoteTime=0;`);
+    for(let jump=0;jump<3;jump++) {
+      const startY=g.run('player.y'), startX=g.run('player.x');
+      g.run('keys.Space=true; updatePlayer()');
+      assert.ok(g.run('player.y')<startY,`block ${index} jump ${jump} must lift off`);
+      assert.ok(g.run('player.vy')<0);
+      g.run('keys.Space=false; for(let frame=0;frame<90;frame++) updatePlayer()');
+      assert.equal(g.run('player.y'),startY);
+      assert.equal(g.run('player.x'),startX);
+      assert.equal(g.run('player.onGround'),true);
+    }
+  }
+});
+test('Editing Showreel is the only video block and leads directly to castle',()=>{
+  const g=game();g.run('initWorld()');
+  assert.equal(g.run('world.blocks.filter(b=>b.project.type==="video").length'),1);
+  assert.equal(g.run('world.blocks.at(-1).project.title'),'Editing Showreel');
+  assert.equal(g.run('world.castleX-(world.blocks.at(-1).x+BLOCK_SIZE)'),180);
+  assert.equal(g.run('world.pipes.some(p=>p.x>world.blocks.at(-1).x)'),false);
+  g.run('gameState=STATE.PLAYING; player.x=world.blocks.at(-1).x+BLOCK_SIZE; player.y=world.groundY-CHAR_H; keys.KeyD=true; for(let i=0;i<100 && gameState===STATE.PLAYING;i++){updatePlayer();checkLevelEnd()}');
+  assert.equal(g.run('gameState'),'end');
+});
+test('background spawns one or two of each per minute with slower motion and no stacking',()=>{
+  const g=game();g.run('initWorld()');
+  const counts=[0,0,0];
+  for(let minute=0;minute<3;minute++) {
+    const before=counts.slice();
+    for(let frame=0;frame<3600;frame++) {
+      g.run('updateBgFlyers()');
+      for(const [i,name] of ['bgBirds','bgPlanes','bgTurtles'].entries()) {
+        assert.ok(g.run(`${name}.length`)<=1);
+        if(g.run(`${name}[0]?.age`)===1)counts[i]++;
+      }
+    }
+    for(let i=0;i<3;i++)assert.ok(counts[i]-before[i]>=1 && counts[i]-before[i]<=2);
+  }
+  g.run('initBgFlyers(); updateBgFlyers(); const birdStart=bgBirds[0].x; updateBgFlyers()');
+  assert.equal(g.run('bgBirds[0].x-birdStart'),0.25);
+  assert.equal(g.run('bgPlanes.length+bgTurtles.length'),0);
 });

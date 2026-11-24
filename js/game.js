@@ -72,7 +72,7 @@ const BLOCK_SIZE = 52;
 const CHAR_W = 44;
 const CHAR_H = 52;
 const COIN_SIZE = 20;
-const WORLD_END_PAD = 380; // extra space after last block
+const CASTLE_GAP = 180; // clear path after the final project block
 
 // Colours
 const COL = {
@@ -425,32 +425,31 @@ function buildWorld() {
     }
   });
 
+  const lastBlock = blocks[blocks.length - 1];
+  const castleX = (lastBlock ? lastBlock.x + lastBlock.w : startX) + CASTLE_GAP;
+  const worldW = castleX + 220;
+
   // A few decorative pipes
   [
     [startX - 160, 80],
     [startX + 900, 100],
     [startX + 1800, 90],
   ].forEach(([px, ph]) => {
-    pipes.push({ x: px, y: groundY - ph, w: 64, h: ph });
+    if (px + 64 < (lastBlock ? lastBlock.x : castleX)) {
+      pipes.push({ x: px, y: groundY - ph, w: 64, h: ph });
+    }
   });
 
   // Background stars (fixed in world space)
   for (let i = 0; i < 60; i++) {
     stars.push({
       x:
-        Math.random() *
-        (startX + PROJECTS.length * levelSpacing + WORLD_END_PAD),
+        Math.random() * worldW,
       y: Math.random() * (H * 0.6),
       r: Math.random() < 0.3 ? 3 : 1.5,
       twinkle: Math.random() * Math.PI * 2,
     });
   }
-
-  // World total width
-  const worldW = startX + PROJECTS.length * levelSpacing + WORLD_END_PAD;
-
-  // Castle position
-  const castleX = worldW - 220;
 
   return { groundY, blocks, pipes, coins, stars, worldW, castleX };
 }
@@ -470,7 +469,6 @@ function createCharacter(groundY) {
     walkFrame: 0,
     walkTimer: 0,
     limbPhase: 0,
-    jumpsLeft: 1, // allow 1 extra coyote jump
     coyoteTime: 0,
     jumpBuffer: 0,
   };
@@ -522,10 +520,6 @@ function updatePlayer() {
   // Clamp horizontal pos within world
   player.x = clamp(player.x + player.vx, 0, world.worldW - CHAR_W);
 
-  // Gravity
-  player.vy += GRAVITY;
-  player.y += player.vy;
-
   // Coyote time
   if (player.onGround) player.coyoteTime = 6;
   else if (player.coyoteTime > 0) player.coyoteTime--;
@@ -545,6 +539,10 @@ function updatePlayer() {
     player.jumpBuffer = 0;
     score += 5;
   }
+
+  // Apply takeoff before integration so a supporting block cannot cancel it.
+  player.vy += GRAVITY;
+  player.y += player.vy;
 
   // Ground collision (skip snap when moving upward, e.g. just jumped)
   player.onGround = false;
@@ -589,7 +587,7 @@ function collidePlayerBlock(p, block) {
     bh = block.h;
 
   // AABB check
-  if (px + pw < bx || px > bx + bw || py + ph < by || py > by + bh) return;
+  if (px + pw <= bx || px >= bx + bw || py + ph <= by || py >= by + bh) return;
 
   const overlapLeft = px + pw - bx;
   const overlapRight = bx + bw - px;
@@ -601,7 +599,8 @@ function collidePlayerBlock(p, block) {
 
   if (minOverlapY < minOverlapX) {
     if (overlapTop < overlapBottom) {
-      // Player standing on top of block
+      // Only downward motion can land on the top surface.
+      if (p.vy < 0) return;
       p.y = by - ph;
       p.vy = 0;
       p.onGround = true;
@@ -680,270 +679,54 @@ let bgTime = 0;
 // --- Background flying objects ---
 const bgBirds = [];
 const bgTurtles = [];
-const bgCrashEvent = {
-  plane: null,
-  ptero: null,
-  phase: "flying",
-  timer: 0,
-  debris: [],
-};
-const bgShootEvent = {
-  plane: null,
-  phase: "approaching",
-  timer: 0,
-  bullets: [],
-  fallingBirds: [],
-  targetFlock: -1,
-};
+const bgPlanes = [];
+const BACKGROUND_INTERVAL = 40 * 60; // one of each every 40 seconds of play
+const BACKGROUND_LIFETIME = 22 * 60;
+let backgroundTick = 0;
+const nextBackgroundSpawn = { bird: 0, plane: 8 * 60, turtle: 16 * 60 };
 
 function initBgFlyers() {
   bgBirds.length = 0;
-  // Create several bird flocks
-  for (let f = 0; f < 4; f++) {
-    const flock = {
-      x: Math.random() * 3000 - 500,
-      y: 30 + Math.random() * (H * 0.25),
-      speed: 0.4 + Math.random() * 0.6,
-      dir: Math.random() < 0.5 ? 1 : -1,
-      birds: [],
-    };
-    const _r = Math.random();
-    const count =
-      _r < 0.15
-        ? 5 + Math.floor(Math.random() * 2)
-        : 1 + Math.floor(Math.random() * 2);
-    for (let b = 0; b < count; b++) {
-      flock.birds.push({
-        ox: (b % 3) * 28 - 28 + Math.random() * 8,
-        oy: Math.floor(b / 3) * 22 + Math.random() * 8,
-        wingPhase: Math.random() * Math.PI * 2,
-      });
-    }
-    bgBirds.push(flock);
-  }
-
-  // Background turtles
   bgTurtles.length = 0;
-  for (let t = 0; t < 3; t++) {
-    bgTurtles.push({
-      x: Math.random() * 3000,
-      speed: 0.25 + Math.random() * 0.35,
-      dir: Math.random() < 0.5 ? 1 : -1,
-      walkPhase: Math.random() * Math.PI * 2,
-    });
-  }
-
-  // Airplane + Pterodactyl crash event
-  bgCrashEvent.phase = "flying";
-  bgCrashEvent.timer = 0;
-  bgCrashEvent.debris = [];
-  bgCrashEvent.plane = {
-    x: -200,
-    y: 50 + Math.random() * (H * 0.15),
-    speed: 1.8,
-  };
-  bgCrashEvent.ptero = {
-    x: W + 200,
-    y: 60 + Math.random() * (H * 0.15),
-    speed: 1.4,
-    wingPhase: 0,
-  };
-
-  // Shooting event — plane shoots down a flock
-  bgShootEvent.phase = "approaching";
-  bgShootEvent.timer = 0;
-  bgShootEvent.bullets = [];
-  bgShootEvent.fallingBirds = [];
-  bgShootEvent.targetFlock = 1; // target the second flock
-  bgShootEvent.plane = {
-    x: -400,
-    y: 0, // will be set to match flock y
-    speed: 2.2,
-  };
+  bgPlanes.length = 0;
+  backgroundTick = 0;
+  nextBackgroundSpawn.bird = 0;
+  nextBackgroundSpawn.plane = 8 * 60;
+  nextBackgroundSpawn.turtle = 16 * 60;
 }
 
 function updateBgFlyers() {
-  // Update bird flocks
-  bgBirds.forEach((flock) => {
-    flock.x += flock.speed * flock.dir;
-    // Wrap around when off screen (in world coords)
-    if (flock.dir > 0 && flock.x > cameraX + W + 200) flock.x = cameraX - 200;
-    if (flock.dir < 0 && flock.x < cameraX - 200) flock.x = cameraX + W + 200;
-    flock.birds.forEach((b) => {
-      b.wingPhase += 0.12;
-    });
-  });
-
-  // Update crash event
-  const ce = bgCrashEvent;
-  if (ce.phase === "flying") {
-    ce.plane.x += ce.plane.speed;
-    ce.ptero.x -= ce.ptero.speed;
-    ce.ptero.wingPhase += 0.08;
-
-    // Check collision (meeting in the middle)
-    const dist = Math.abs(ce.plane.x - ce.ptero.x);
-    if (dist < 60) {
-      ce.phase = "crash";
-      ce.timer = 0;
-      // midpoint
-      const mx = (ce.plane.x + ce.ptero.x) / 2;
-      const my = (ce.plane.y + ce.ptero.y) / 2;
-      // Spawn debris
-      for (let i = 0; i < 12; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 1 + Math.random() * 3;
-        ce.debris.push({
-          x: mx,
-          y: my,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 1,
-          size: 2 + Math.random() * 4,
-          color: ["#ccc", "#888", "#e44", "#ff0", "#5a5", "#fff"][
-            Math.floor(Math.random() * 6)
-          ],
-          life: 80 + Math.random() * 60,
-        });
-      }
-    }
-  } else if (ce.phase === "crash") {
-    ce.timer++;
-    ce.debris.forEach((d) => {
-      d.x += d.vx;
-      d.y += d.vy;
-      d.vy += 0.04; // gravity
-      d.life--;
-    });
-    ce.debris = ce.debris.filter((d) => d.life > 0);
-    // Reset after debris clears
-    if (ce.timer > 200) {
-      ce.phase = "flying";
-      ce.timer = 0;
-      ce.debris = [];
-      ce.plane.x = cameraX - 300 - Math.random() * 200;
-      ce.plane.y = 40 + Math.random() * (H * 0.18);
-      ce.ptero.x = cameraX + W + 300 + Math.random() * 200;
-      ce.ptero.y = 50 + Math.random() * (H * 0.18);
+  if (backgroundTick >= nextBackgroundSpawn.bird) {
+    bgBirds.push({ x: cameraX * 0.2 + 24, y: 50 + H * 0.08,
+      speed: 0.25, dir: 1, wingPhase: 0, age: 0 });
+    nextBackgroundSpawn.bird += BACKGROUND_INTERVAL;
+  }
+  if (backgroundTick >= nextBackgroundSpawn.plane) {
+    bgPlanes.push({ x: cameraX * 0.2 - 60, y: 50 + H * 0.16,
+      speed: 0.65, age: 0 });
+    nextBackgroundSpawn.plane += BACKGROUND_INTERVAL;
+  }
+  if (backgroundTick >= nextBackgroundSpawn.turtle) {
+    bgTurtles.push({ x: cameraX * 0.15 + W * 0.75, speed: 0.12,
+      dir: -1, walkPhase: 0, age: 0 });
+    nextBackgroundSpawn.turtle += BACKGROUND_INTERVAL;
+  }
+  backgroundTick++;
+  for (const group of [bgBirds, bgPlanes, bgTurtles]) {
+    for (let i = group.length - 1; i >= 0; i--) {
+      const actor = group[i];
+      actor.x += actor.speed * (actor.dir || 1);
+      actor.age++;
+      if (actor.wingPhase !== undefined) actor.wingPhase += 0.04;
+      if (actor.walkPhase !== undefined) actor.walkPhase += 0.02;
+      if (actor.age >= BACKGROUND_LIFETIME) group.splice(i, 1);
     }
   }
+}
 
-  // Update shoot event
-  const se = bgShootEvent;
-  const groundY = H - GROUND_H;
-  const targetFlock = bgBirds[se.targetFlock];
-
-  if (se.phase === "approaching" && targetFlock) {
-    // Plane flies toward the flock from the left
-    se.plane.y = targetFlock.y;
-    se.plane.x += se.plane.speed;
-    // When close enough, start shooting
-    if (se.plane.x > targetFlock.x - 150) {
-      se.phase = "shooting";
-      se.timer = 0;
-    }
-  } else if (se.phase === "shooting" && targetFlock) {
-    se.plane.x += se.plane.speed * 0.6; // slow down while shooting
-    se.timer++;
-    // Fire bullets at intervals
-    if (se.timer % 8 === 0 && se.timer <= 48) {
-      se.bullets.push({
-        x: se.plane.x + 30,
-        y: se.plane.y,
-        vx: 4,
-        vy: 0.5 + Math.random() * 0.5,
-      });
-    }
-    // Check bullet-bird hits
-    se.bullets.forEach((bullet) => {
-      bullet.x += bullet.vx;
-      bullet.y += bullet.vy;
-    });
-    // Check if bullets reach the flock area
-    if (targetFlock.birds.length > 0) {
-      se.bullets.forEach((bullet) => {
-        const flockScreenX = targetFlock.x;
-        if (
-          bullet.x > flockScreenX - 40 &&
-          bullet.x < flockScreenX + 60 &&
-          Math.abs(bullet.y - targetFlock.y) < 40
-        ) {
-          // Hit a bird!
-          const bird = targetFlock.birds.pop();
-          if (bird) {
-            se.fallingBirds.push({
-              x: targetFlock.x + bird.ox * targetFlock.dir,
-              y: targetFlock.y + bird.oy,
-              vy: 0,
-              vx: targetFlock.dir * 0.3,
-              rot: 0,
-              rotSpeed: (Math.random() - 0.5) * 0.15,
-              wingPhase: bird.wingPhase, // frozen wings
-            });
-            bullet.x = 9999; // mark as used
-          }
-        }
-      });
-    }
-    se.bullets = se.bullets.filter(
-      (b) => b.x < cameraX + W + 100 && b.x !== 9999,
-    );
-    // Move on once done shooting
-    if (se.timer > 70) {
-      se.phase = "flyaway";
-    }
-  } else if (se.phase === "flyaway") {
-    se.plane.x += se.plane.speed * 1.5; // zoom off
-    // Update falling birds
-    se.fallingBirds.forEach((fb) => {
-      fb.vy += 0.08; // gravity
-      fb.y += fb.vy;
-      fb.x += fb.vx;
-      fb.rot += fb.rotSpeed;
-    });
-    // Remove birds that hit the ground
-    se.fallingBirds = se.fallingBirds.filter((fb) => fb.y < groundY + 10);
-    // Reset once plane is gone and birds have landed
-    if (se.plane.x > cameraX + W + 400 && se.fallingBirds.length === 0) {
-      se.phase = "cooldown";
-      se.timer = 0;
-    }
-  } else if (se.phase === "cooldown") {
-    se.timer++;
-    if (se.timer > 300) {
-      // Respawn the target flock's birds and reset
-      const flock = bgBirds[se.targetFlock];
-      if (flock) {
-        flock.birds = [];
-        const _rr = Math.random();
-        const count =
-          _rr < 0.15
-            ? 5 + Math.floor(Math.random() * 2)
-            : 1 + Math.floor(Math.random() * 2);
-        for (let b = 0; b < count; b++) {
-          flock.birds.push({
-            ox: (b % 3) * 28 - 28 + Math.random() * 8,
-            oy: Math.floor(b / 3) * 22 + Math.random() * 8,
-            wingPhase: Math.random() * Math.PI * 2,
-          });
-        }
-      }
-      se.phase = "approaching";
-      se.timer = 0;
-      se.bullets = [];
-      se.fallingBirds = [];
-      se.plane.x = cameraX - 500 - Math.random() * 300;
-      // Pick a random flock to target next
-      se.targetFlock = Math.floor(Math.random() * bgBirds.length);
-    }
-  }
-
-  // Update background turtles
-  bgTurtles.forEach((t) => {
-    t.x += t.speed * t.dir;
-    t.walkPhase += 0.06;
-    if (t.dir > 0 && t.x > cameraX + W + 300) t.x = cameraX - 200;
-    if (t.dir < 0 && t.x < cameraX - 200) t.x = cameraX + W + 300;
-  });
+function backgroundOpacity(actor) {
+  // Fade in/out gently; actors never wrap back into the scene.
+  return Math.min(1, actor.age / 120, (BACKGROUND_LIFETIME - actor.age) / 120);
 }
 
 function drawPixelTurtle(x, y, walkPhase, dir) {
@@ -994,8 +777,8 @@ function drawBgTurtles() {
   if (!world) return;
   const parallax = 0.15;
   const groundY = H - GROUND_H;
-  ctx.globalAlpha = 0.72;
   bgTurtles.forEach((t) => {
+    ctx.globalAlpha = 0.72 * backgroundOpacity(t);
     const sx = t.x - cameraX * parallax;
     if (sx > -60 && sx < W + 60) {
       drawPixelTurtle(sx, groundY, t.walkPhase, t.dir);
@@ -1123,188 +906,18 @@ function drawPixelPlane(x, y) {
   ctx.restore();
 }
 
-function drawPixelPtero(x, y, wingPhase) {
-  const s = 4; // bigger pixels
-  const wingAngle = Math.sin(wingPhase);
-  ctx.save();
-  ctx.translate(x, y);
-
-  // --- Salmon/brown pterodactyl inspired by reference ---
-  const wingY = wingAngle * s * 5;
-
-  // Upper left wing
-  ctx.fillStyle = "#e8a898";
-  ctx.fillRect(-s * 8, -s * 2 + wingY, s * 6, s * 2);
-  ctx.fillStyle = "#d48878";
-  ctx.fillRect(-s * 10, -s * 4 + wingY * 1.2, s * 4, s * 2);
-  ctx.fillStyle = "#c07868";
-  ctx.fillRect(-s * 11, -s * 5 + wingY * 1.4, s * 2, s);
-  // Wing membrane detail
-  ctx.fillStyle = "#dba090";
-  ctx.fillRect(-s * 7, -s + wingY * 0.5, s * 5, s);
-
-  // Upper right wing
-  ctx.fillStyle = "#e8a898";
-  ctx.fillRect(s * 2, -s * 2 + wingY, s * 6, s * 2);
-  ctx.fillStyle = "#d48878";
-  ctx.fillRect(s * 6, -s * 4 + wingY * 1.2, s * 4, s * 2);
-  ctx.fillStyle = "#c07868";
-  ctx.fillRect(s * 9, -s * 5 + wingY * 1.4, s * 2, s);
-  // Wing membrane detail
-  ctx.fillStyle = "#dba090";
-  ctx.fillRect(s * 3, -s + wingY * 0.5, s * 5, s);
-
-  // Body (central mass)
-  ctx.fillStyle = "#b06858";
-  ctx.fillRect(-s * 2, -s, s * 5, s * 3);
-  // Body highlight
-  ctx.fillStyle = "#d48878";
-  ctx.fillRect(-s, -s, s * 3, s);
-  // Body underside
-  ctx.fillStyle = "#8a4838";
-  ctx.fillRect(-s, s, s * 3, s);
-
-  // Neck
-  ctx.fillStyle = "#b06858";
-  ctx.fillRect(s * 3, -s * 2, s * 2, s * 3);
-
-  // Head
-  ctx.fillStyle = "#c07868";
-  ctx.fillRect(s * 5, -s * 3, s * 3, s * 3);
-  // Head crest
-  ctx.fillStyle = "#b06858";
-  ctx.fillRect(s * 5, -s * 4, s * 2, s);
-  ctx.fillRect(s * 4, -s * 5, s, s);
-
-  // Beak (long, pointing right)
-  ctx.fillStyle = "#8a4838";
-  ctx.fillRect(s * 8, -s * 2, s * 3, s);
-  ctx.fillRect(s * 10, -s, s * 2, s);
-  ctx.fillStyle = "#704030";
-  ctx.fillRect(s * 11, -s * 2, s, s);
-
-  // Eye
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(s * 6, -s * 2, s, s);
-  ctx.fillStyle = "#000";
-  ctx.fillRect(s * 6 + s * 0.3, -s * 2 + s * 0.3, s * 0.5, s * 0.5);
-
-  // Feet (dangling)
-  ctx.fillStyle = "#8a4838";
-  ctx.fillRect(-s, s * 2, s, s * 2);
-  ctx.fillRect(s, s * 2, s, s * 2);
-  // Claws
-  ctx.fillStyle = "#704030";
-  ctx.fillRect(-s * 2, s * 4, s * 2, s);
-  ctx.fillRect(0, s * 4, s * 2, s);
-
-  // Tail
-  ctx.fillStyle = "#b06858";
-  ctx.fillRect(-s * 3, 0, s, s * 2);
-  ctx.fillRect(-s * 4, s, s, s);
-
-  ctx.restore();
-}
-
 function drawBgFlyers() {
-  const parallax = 0.2;
-
-  // Draw bird flocks
-  bgBirds.forEach((flock) => {
-    const sx = flock.x - cameraX * parallax;
-    flock.birds.forEach((b) => {
-      const bx = sx + b.ox * flock.dir;
-      const by = flock.y + b.oy;
-      if (bx > -20 && bx < W + 20) {
-        drawPixelBird(bx, by, b.wingPhase, flock.dir);
-      }
-    });
+  bgBirds.forEach((bird) => {
+    const x = bird.x - cameraX * 0.2;
+    ctx.globalAlpha = backgroundOpacity(bird);
+    if (x > -40 && x < W + 40) drawPixelBird(x, bird.y, bird.wingPhase, bird.dir);
   });
-
-  // Draw plane + ptero crash
-  const ce = bgCrashEvent;
-  if (ce.phase === "flying") {
-    const px = ce.plane.x - cameraX * parallax;
-    const ptx = ce.ptero.x - cameraX * parallax;
-    if (px > -100 && px < W + 100) {
-      drawPixelPlane(px, ce.plane.y);
-    }
-    if (ptx > -100 && ptx < W + 100) {
-      drawPixelPtero(ptx, ce.ptero.y, ce.ptero.wingPhase);
-    }
-  } else if (ce.phase === "crash") {
-    // Draw debris
-    ce.debris.forEach((d) => {
-      const dx = d.x - cameraX * parallax;
-      if (dx > -20 && dx < W + 20) {
-        ctx.globalAlpha = Math.min(1, d.life / 40);
-        ctx.fillStyle = d.color;
-        ctx.fillRect(dx, d.y, d.size, d.size);
-      }
-    });
-    ctx.globalAlpha = 1;
-
-    // Flash on impact
-    if (ce.timer < 4) {
-      ctx.globalAlpha = 0.3 - ce.timer * 0.07;
-      ctx.fillStyle = "#fff";
-      const mx = (ce.plane.x + ce.ptero.x) / 2 - cameraX * parallax;
-      ctx.beginPath();
-      ctx.arc(
-        mx,
-        (ce.plane.y + ce.ptero.y) / 2,
-        30 + ce.timer * 10,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // Draw shooting event
-  const se = bgShootEvent;
-  const spx = se.plane.x - cameraX * parallax;
-
-  // Draw the shooter plane (if not in cooldown)
-  if (se.phase !== "cooldown" && spx > -100 && spx < W + 200) {
-    drawPixelPlane(spx, se.plane.y);
-  }
-
-  // Draw bullets
-  se.bullets.forEach((bullet) => {
-    const bx = bullet.x - cameraX * parallax;
-    if (bx > -10 && bx < W + 10) {
-      // Bullet tracer
-      ctx.fillStyle = "#ff0";
-      ctx.fillRect(bx, bullet.y, 6, 2);
-      ctx.fillStyle = "#fa0";
-      ctx.fillRect(bx - 4, bullet.y, 4, 2);
-    }
+  bgPlanes.forEach((plane) => {
+    const x = plane.x - cameraX * 0.2;
+    ctx.globalAlpha = backgroundOpacity(plane);
+    if (x > -100 && x < W + 100) drawPixelPlane(x, plane.y);
   });
-
-  // Draw falling dead birds (tumbling down)
-  se.fallingBirds.forEach((fb) => {
-    const fbx = fb.x - cameraX * parallax;
-    if (fbx > -30 && fbx < W + 30) {
-      ctx.save();
-      ctx.translate(fbx, fb.y);
-      ctx.rotate(fb.rot);
-      // Draw a simpler dead bird (legs up, no flapping)
-      const s = 4;
-      ctx.fillStyle = "#3a2a1a";
-      ctx.fillRect(-s * 2, -s, s * 4, s);
-      ctx.fillRect(-s, -s * 2, s * 2, s);
-      // X eyes
-      ctx.fillStyle = "#c00";
-      ctx.fillRect(-s * 0.3, -s * 1.5, s * 0.6, s * 0.6);
-      // Wings stuck out
-      ctx.fillStyle = "#4a3828";
-      ctx.fillRect(-s * 3, 0, s * 2, s);
-      ctx.fillRect(s * 2, 0, s * 2, s);
-      ctx.restore();
-    }
-  });
+  ctx.globalAlpha = 1;
 }
 
 function drawBackground() {
