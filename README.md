@@ -46,9 +46,6 @@ No frameworks, no build tools, no dependencies — pure HTML, CSS, and JavaScrip
 | Project                 | Description                                 | Tools                                        |
 | ----------------------- | ------------------------------------------- | -------------------------------------------- |
 | **Editing Showreel**    | Video editing portfolio reel                | Premiere Pro, DaVinci Resolve, After Effects |
-| **Demo Reel**           | Cinematography reel across multiple cameras | Sony A7S II, RED, Blackmagic                 |
-| **The Final Hand**      | Poker-themed comedy short film              | Premiere Pro, After Effects, Sound Design    |
-| **Can You Not See It?** | Poetic short film                           | Cinematography, Premiere Pro, Color Grading  |
 
 ## Project Structure
 
@@ -88,3 +85,7 @@ npx serve .
 
 **Gene** — Software Engineer & Content Creator  
 GitHub: [@Jellyfish15](https://github.com/Jellyfish15)
+
+## Regression checks
+
+Run `node --test tests/game.test.cjs` (Node.js 18 or newer). These headless logic checks cover refresh-rate independence, 100 replays, modal return state, jumping, resizing, pause/input resets, block rewards, and 60,000 simulation steps. Canvas rendering and touch-device appearance still require a browser check.

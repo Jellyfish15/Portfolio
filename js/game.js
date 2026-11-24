@@ -49,7 +49,15 @@ function resize() {
   }
 }
 window.addEventListener("resize", () => {
+  const oldHeight = H;
   resize();
+  if (world) {
+    const shift = H - oldHeight;
+    world.groundY += shift;
+    player.y += shift;
+    [...world.blocks, ...world.pipes, ...world.coins].forEach(item => item.y += shift);
+    updateCamera();
+  }
 });
 resize();
 
@@ -96,6 +104,7 @@ const STATE = {
   LANDING: "landing",
   PLAYING: "playing",
   MODAL: "modal",
+  PAUSED: "paused",
   END: "end",
 };
 
@@ -110,15 +119,35 @@ let userPhoto = null; // HTMLImageElement if uploaded
 // ============================================================
 const keys = {};
 const touch = { left: false, right: false, jump: false };
+let jumpHeld = false;
+function clearInput() {
+  Object.keys(keys).forEach(key => keys[key] = false);
+  Object.keys(touch).forEach(key => touch[key] = false);
+  document.querySelectorAll(".ctrl-btn").forEach(el => el.classList.remove("pressed"));
+  jumpHeld = false;
+  if (player) player.jumpBuffer = 0;
+}
+function pauseGame() {
+  clearInput();
+  if (gameState === STATE.PLAYING) gameState = STATE.PAUSED;
+  resetClock();
+}
+window.addEventListener("blur", pauseGame);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pauseGame();
+});
 
 document.addEventListener("keydown", (e) => {
+  if (e.code === "Escape" && !e.repeat) {
+    if ($("resume-overlay").classList.contains("active")) closeResume();
+    else if (gameState === STATE.MODAL) closeModal();
+    else if (gameState === STATE.PLAYING) pauseGame();
+    else if (gameState === STATE.PAUSED) { gameState = STATE.PLAYING; resetClock(); }
+    return;
+  }
+  if (gameState !== STATE.PLAYING) return;
   keys[e.code] = true;
-  if (e.code === "Space") e.preventDefault();
-  if (e.code === "ArrowUp") e.preventDefault();
-  if (e.code === "ArrowDown") e.preventDefault();
-  if (e.code === "Escape" && gameState === STATE.MODAL) closeModal();
-  if (e.code === "Escape" && $("resume-overlay").classList.contains("active"))
-    closeResume();
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
 });
 document.addEventListener("keyup", (e) => {
   keys[e.code] = false;
@@ -131,6 +160,9 @@ function setupMobileControls() {
     if (!el) return;
     const down = (e) => {
       e.preventDefault();
+      if (gameState === STATE.PAUSED) { gameState = STATE.PLAYING; resetClock(); }
+      if (gameState !== STATE.PLAYING) return;
+      el.setPointerCapture(e.pointerId);
       touch[prop] = true;
       el.classList.add("pressed");
     };
@@ -139,10 +171,10 @@ function setupMobileControls() {
       touch[prop] = false;
       el.classList.remove("pressed");
     };
-    el.addEventListener("touchstart", down, { passive: false });
-    el.addEventListener("touchend", up, { passive: false });
-    el.addEventListener("mousedown", down);
-    el.addEventListener("mouseup", up);
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    el.addEventListener("lostpointercapture", up);
   };
   bindBtn("ctrl-left", "left");
   bindBtn("ctrl-right", "right");
@@ -451,11 +483,15 @@ let world = null;
 let player = null;
 
 function initWorld() {
+  clearInput();
+  resetClock();
   world = buildWorld();
   player = createCharacter(world.groundY);
   cameraX = 0;
   score = 0;
   coinCount = 0;
+  bgTime = 0;
+  qAnimTime = 0;
   initBgFlyers();
 }
 
@@ -495,8 +531,11 @@ function updatePlayer() {
   else if (player.coyoteTime > 0) player.coyoteTime--;
 
   // Jump buffer
-  if (isJump()) player.jumpBuffer = 8;
+  const jumpPressed = !!isJump();
+  if (jumpPressed && !jumpHeld) player.jumpBuffer = 8;
   else if (player.jumpBuffer > 0) player.jumpBuffer--;
+
+  jumpHeld = jumpPressed;
 
   // Execute jump
   if (player.jumpBuffer > 0 && (player.onGround || player.coyoteTime > 0)) {
@@ -535,7 +574,7 @@ function updatePlayer() {
   } else if (player.onGround) {
     player.walkFrame = 0;
     // Ease limb phase back to neutral
-    player.limbPhase *= 0.8;
+    player.limbPhase += (Math.round(player.limbPhase / Math.PI) * Math.PI - player.limbPhase) * 0.2;
   }
 }
 
@@ -611,7 +650,7 @@ function updateCamera() {
   if (!player || !world) return;
   const targetX = player.x - W * 0.35;
   cameraX = lerp(cameraX, targetX, 0.1);
-  cameraX = clamp(cameraX, 0, world.worldW - W);
+  cameraX = clamp(cameraX, 0, Math.max(0, world.worldW - W));
 }
 
 // ============================================================
@@ -1269,8 +1308,6 @@ function drawBgFlyers() {
 }
 
 function drawBackground() {
-  bgTime += 0.005;
-
   // Sky gradient
   const grad = ctx.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, "#1a1a4e");
@@ -1281,9 +1318,7 @@ function drawBackground() {
 
   // Twinkling stars (fixed in screen space for BG feel)
   if (world) {
-    world.stars.forEach((s) => {
-      s.twinkle += 0.03;
-      const brightness = 0.5 + 0.5 * Math.sin(s.twinkle);
+    world.stars.forEach((s) => {      const brightness = 0.5 + 0.5 * Math.sin(s.twinkle);
       ctx.globalAlpha = brightness * 0.8;
       ctx.fillStyle = COL.starColor;
       const sx = s.x - cameraX * 0.15; // parallax
@@ -1440,7 +1475,7 @@ let qAnimTime = 0;
 
 function drawBlocks() {
   if (!world) return;
-  qAnimTime += 0.08;
+
 
   world.blocks.forEach((block) => {
     const sx = block.x - cameraX;
@@ -1450,7 +1485,6 @@ function drawBlocks() {
     let bumpOffset = 0;
     if (block.anim > 0) {
       bumpOffset = Math.sin(((12 - block.anim) / 12) * Math.PI) * -12;
-      block.anim--;
     }
 
     const by = block.y + bumpOffset;
@@ -1589,7 +1623,7 @@ function drawCastle() {
   ctx.fillRect(cx + cW / 2 - 2, cy - 80, 4, 80);
 
   // Flag (waving)
-  const waveT = Date.now() * 0.004;
+  const waveT = bgTime * 13.333;
   ctx.fillStyle = "#e52521";
   ctx.beginPath();
   ctx.moveTo(cx + cW / 2 + 2, cy - 80);
@@ -1646,15 +1680,38 @@ function checkLevelEnd() {
 // ============================================================
 // MAIN GAME LOOP
 // ============================================================
-let lastTime = 0;
-
+const FRAME_MS = 1000 / 60;
+let lastTime = null;
+let accumulator = 0;
+let loopStarted = false;
+function resetClock() { lastTime = null; accumulator = 0; }
+function startLoop() {
+  if (loopStarted) return;
+  loopStarted = true;
+  requestAnimationFrame(gameLoop);
+}
 function gameLoop(ts) {
-  const dt = Math.min((ts - lastTime) / 16.67, 3); // cap at 3 frames
+  const elapsed = lastTime === null ? 0 : clamp(ts - lastTime, 0, 100);
   lastTime = ts;
+  if (gameState === STATE.PLAYING) {
+    accumulator += elapsed;
+    while (accumulator >= FRAME_MS && gameState === STATE.PLAYING) {
+      accumulator -= FRAME_MS;
+      updatePlayer();
+      updateCamera();
+      updateCoins();
+      updateBgFlyers();
+      bgTime += 0.005;
+      qAnimTime += 0.08;
+      world.stars.forEach(star => star.twinkle += 0.03);
+      world.blocks.forEach(block => { if (block.anim > 0) block.anim--; });
+      if (gameState === STATE.PLAYING) checkLevelEnd();
+    }
+  } else accumulator = 0;
 
   ctx.clearRect(0, 0, W, H);
 
-  if (gameState === STATE.PLAYING || gameState === STATE.MODAL) {
+  if (world && (gameState === STATE.PLAYING || gameState === STATE.MODAL || gameState === STATE.PAUSED)) {
     // On mobile portrait apply an upward shift so the character and
     // ground are visible rather than crammed at the screen edge.
     if (mobileOffsetY > 0) (ctx.save(), ctx.translate(0, -mobileOffsetY));
@@ -1692,12 +1749,15 @@ function gameLoop(ts) {
 
     drawHUD();
 
-    if (gameState === STATE.PLAYING) {
-      updatePlayer();
-      updateCamera();
-      updateCoins();
-      updateBgFlyers();
-      checkLevelEnd();
+    if (gameState === STATE.PAUSED) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#fff";
+      ctx.font = "16px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("PAUSED", W / 2, H / 2);
+      ctx.fillText("ESC or tap a control to resume", W / 2, H / 2 + 28, W - 24);
+      ctx.textAlign = "left";
     }
   }
 
@@ -1707,7 +1767,10 @@ function gameLoop(ts) {
 // ============================================================
 // MODAL
 // ============================================================
+let modalReturnState = STATE.PLAYING;
 function showModal(project) {
+  if (gameState !== STATE.MODAL) modalReturnState = gameState;
+  clearInput();
   gameState = STATE.MODAL;
 
   const overlay = $("modal-overlay");
@@ -1778,7 +1841,9 @@ function showModal(project) {
 
 function closeModal() {
   $("modal-overlay").classList.remove("active");
-  gameState = STATE.PLAYING;
+  if (gameState === STATE.MODAL) gameState = modalReturnState;
+  clearInput();
+  resetClock();
 }
 
 // ============================================================
@@ -1846,6 +1911,7 @@ function closeResume() {
 function showEndScreen(skipped) {
   if (gameState === STATE.END) return;
   gameState = STATE.END;
+  clearInput();
 
   const endScreen = $("end-screen");
   endScreen.classList.add("active");
@@ -1945,9 +2011,7 @@ function showEndScreen(skipped) {
   // Play again
   const btn = $("play-again-btn");
   if (btn)
-    btn.addEventListener(
-      "click",
-      () => {
+    btn.onclick = () => {
         endScreen.classList.remove("active");
         $("end-score").style.display = "";
         initWorld();
@@ -1955,10 +2019,8 @@ function showEndScreen(skipped) {
         $("game-screen").style.display = "block";
         $("hud").style.display = "flex";
         $("controls-hint").style.display = "block";
-        requestAnimationFrame(gameLoop);
-      },
-      { once: true },
-    );
+        startLoop();
+      };
 }
 
 // ============================================================
@@ -2015,6 +2077,8 @@ function setupLanding() {
 
   // Skip button — go straight to portfolio
   $("skip-btn").addEventListener("click", () => {
+    if (landingTransition) return;
+    landingTransition = true;
     $("landing-screen").style.opacity = "0";
     setTimeout(() => {
       $("landing-screen").style.display = "none";
@@ -2122,7 +2186,10 @@ function drawLandingAvatar() {
 // ============================================================
 // START GAME
 // ============================================================
+let landingTransition = false;
 function startGame() {
+  if (landingTransition) return;
+  landingTransition = true;
   const landing = $("landing-screen");
   landing.classList.add("fade-out");
 
@@ -2140,7 +2207,7 @@ function startGame() {
     initWorld();
     gameState = STATE.PLAYING;
 
-    requestAnimationFrame(gameLoop);
+    startLoop();
   }, 800);
 }
 

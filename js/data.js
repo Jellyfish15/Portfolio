@@ -104,67 +104,7 @@ const PROJECTS = [
     year: "2023",
     highlight: "Showreel",
   },
-  {
-    id: 8,
-    type: "video",
-    blockColor: "#049cd8",
-    title: "Demo Reel",
-    subtitle: "Cinematography Reel",
-    description:
-      "A demo reel compiling all filmed projects, showcasing cinematography skills across a range of cameras and studio setups.",
-    technologies: [
-      "Sony A7S II",
-      "RED Camera",
-      "Blackmagic Camera",
-      "Canon Rebel",
-      "Studio Lighting",
-    ],
-    github: "",
-    live: "https://youtu.be/zPk3wY8ZCO8",
-    videoEmbed: "",
-    year: "2022",
-    highlight: "Demo Reel",
-  },
-  {
-    id: 9,
-    type: "video",
-    blockColor: "#049cd8",
-    title: "The Final Hand",
-    subtitle: "Comedy Short Film",
-    description:
-      "A poker-themed comedy short film set at an online poker table, following a tense game that unfolds with humor and unexpected twists.",
-    technologies: [
-      "Premiere Pro",
-      "After Effects",
-      "Sound Design",
-      "Color Grading",
-    ],
-    github: "",
-    live: "https://youtu.be/TBRAvE703s4",
-    videoEmbed: "",
-    year: "2022",
-    highlight: "Short Film",
-  },
-  {
-    id: 10,
-    type: "video",
-    blockColor: "#049cd8",
-    title: "Can You Not See It?",
-    subtitle: "Poetic Short Film",
-    description:
-      "A short poetic film piece evoking the emotions of someone struggling, who finds solace in a flower growing amidst a broken-down house. A meditation on hope and beauty in desolation.",
-    technologies: [
-      "Cinematography",
-      "Premiere Pro",
-      "Color Grading",
-      "Sound Design",
-    ],
-    github: "",
-    live: "https://youtu.be/v9ri3IjrMTs",
-    videoEmbed: "",
-    year: "2022",
-    highlight: "Poetry Film",
-  },
+
 ];
 
 // Social / Contact links shown on the end screen

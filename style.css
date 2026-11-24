@@ -1217,3 +1217,7 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--mario-yellow);
 }
+
+/* Project details must also appear above the portfolio overview. */
+#modal-overlay { z-index: 350; }
+.ctrl-btn { touch-action: none; }
